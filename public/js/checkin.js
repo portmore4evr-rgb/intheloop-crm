@@ -36,6 +36,9 @@ function showPass(data, heading) {
   const offerEl = document.getElementById('pass-offer-text');
   const note = document.getElementById('pass-note');
   offerEl.textContent = currentOffer || 'Your reward';
+  const c = data.customer || {};
+  document.getElementById('visit-number').textContent =
+    `${c.memberNumber ? `Member #${c.memberNumber} · ` : ''}Visit #${c.visitNumber || 1}`;
   if (data.status === 'redeemed_today') {
     box.className = 'rounded-2xl px-4 py-3 mb-4 text-sm bg-paper border border-line text-inksoft';
     box.textContent = '✓ Reward already used today. Rewards are once per day, so come back tomorrow for your next one:';
@@ -150,18 +153,25 @@ async function joinWithSavedInfo() {
 
 async function saveTodayVisit() {
   const visitType = document.getElementById('today-visit').value;
-  if (!visitType) return;
+  const saved = document.getElementById('today-saved');
+  const err = document.getElementById('today-error');
+  const btn = document.getElementById('today-submit');
+  saved.classList.add('hidden'); err.classList.add('hidden');
+  if (!visitType) { err.textContent = 'Please choose one first.'; err.classList.remove('hidden'); return; }
+  btn.disabled = true; btn.textContent = 'Saving…';
   try {
     const res = await fetch('/api/public/returning', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ restaurantId, token: getToken(), visitType }),
     });
-    if (res.ok) {
-      const el = document.getElementById('today-saved');
-      el.classList.remove('hidden');
-      setTimeout(() => el.classList.add('hidden'), 2500);
-    }
-  } catch (e) {}
+    if (!res.ok) throw new Error('save failed');
+    saved.classList.remove('hidden');
+    btn.textContent = 'Saved ✓';
+    setTimeout(() => { btn.textContent = 'Submit'; btn.disabled = false; }, 2500);
+  } catch (e) {
+    err.textContent = 'Could not save. Please try again.'; err.classList.remove('hidden');
+    btn.textContent = 'Submit'; btn.disabled = false;
+  }
 }
 
 function notMe() {
@@ -172,7 +182,7 @@ function notMe() {
   showStep(1);
 }
 
-document.getElementById('today-visit').addEventListener('change', saveTodayVisit);
+document.getElementById('today-submit').addEventListener('click', saveTodayVisit);
 document.getElementById('join-btn').addEventListener('click', joinWithSavedInfo);
 document.getElementById('not-me').addEventListener('click', notMe);
 document.getElementById('join-not-me').addEventListener('click', notMe);

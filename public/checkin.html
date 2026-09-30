@@ -92,7 +92,8 @@
     <div class="ticket bg-paper2 border border-line rounded-[32px] p-7 pop-in text-center">
       <p id="pass-heading" class="font-mono text-[11px] uppercase tracking-widest text-amberdeep mb-2">You're In The Loop</p>
       <p class="text-inksoft text-sm mb-1">Your Reward ID</p>
-      <p id="reward-id" class="font-code font-semibold text-4xl tracking-wider mb-4">—</p>
+      <p id="reward-id" class="font-code font-semibold text-4xl tracking-wider mb-2">—</p>
+      <p id="visit-number" class="font-mono text-[11px] uppercase tracking-widest text-inksoft mb-4"></p>
       <div class="ticket-perf my-5"></div>
       <div id="status-box" class="rounded-2xl px-4 py-3 mb-4 text-sm"></div>
       <h2 id="pass-offer-text" class="font-display text-3xl mb-4">—</h2>
@@ -109,7 +110,9 @@
           <option value="social">Saw you on social media</option>
           <option value="event">Here for an event / game night</option>
         </select>
-        <p id="today-saved" class="text-okgreen text-xs text-center -mt-2 mb-2 hidden">Thanks! Saved.</p>
+        <button id="today-submit" class="w-full bg-amber text-paper2 font-display text-lg py-3 rounded-full hover:bg-amberdark transition mb-2">Submit</button>
+        <p id="today-saved" class="text-okgreen text-xs text-center mb-2 hidden">Thanks! Saved to your profile.</p>
+        <p id="today-error" class="text-brick text-xs text-center mb-2 hidden"></p>
       </div>
       <button id="not-me" class="text-inksoft text-xs underline mt-2">Not you? Use different info</button>
     </div>
