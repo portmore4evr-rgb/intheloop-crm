@@ -40,6 +40,12 @@
   #modal-backdrop .card { background:#f5ead8; box-shadow: 0 12px 32px rgba(46,43,37,0.22); }
   a { color:#8c491a; } a:hover { color:#b2622d; }
   .font-mono.uppercase { font-weight: 600; letter-spacing: 0.08em; }
+  /* Pipeline: all 5 stages fit the page width, no sideways scrolling */
+  .pipeline-grid { display: grid; gap: 12px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .pipeline-grid > * { min-width: 0; }
+  .pipeline-grid p, .pipeline-grid button { overflow-wrap: anywhere; }
+  @media (max-width: 900px) { .pipeline-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 520px) { .pipeline-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body class="font-body text-ink antialiased dot-field">
@@ -61,7 +67,7 @@
   <!-- PIPELINE VIEW -->
   <section id="view-pipeline">
     <p class="font-mono text-xs uppercase tracking-wider text-inkmute mb-4">Lead Pipeline</p>
-    <div id="pipeline-board" class="grid gap-4" style="grid-template-columns: repeat(5, minmax(220px, 1fr)); overflow-x: auto;"></div>
+    <div id="pipeline-board" class="pipeline-grid"></div>
   </section>
 
   <!-- RESTAURANTS VIEW -->
