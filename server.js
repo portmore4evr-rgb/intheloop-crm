@@ -145,6 +145,34 @@ function passStatus(customer) {
   return 'ready';
 }
 
+// Every scan (one per guest per day) gets its own visit code the server reads at a glance:
+//   R-0143 = REWARD: give the reward (logged automatically, once per day)
+//   N-0143 = NEW member who joined today (reward starts next visit)
+//   X-0143 = reward already used today
+// The number counts up with every visit at the restaurant. Re-scanning the same day shows the same code.
+const SCAN_LETTERS = { reward: 'R', new: 'N', used: 'X' };
+function processScan(db, restaurant, customer, visit) {
+  if (!visit.code) {
+    const today = localDay(new Date());
+    let status = 'reward';
+    if (localDay(customer.optedInAt) === today) status = 'new';
+    else if (customer.lastRedemptionAt && localDay(customer.lastRedemptionAt) === today) status = 'used';
+    restaurant.visitCounter = (restaurant.visitCounter || 0) + 1;
+    visit.code = `${SCAN_LETTERS[status]}-${String(restaurant.visitCounter).padStart(4, '0')}`;
+    visit.scanStatus = status;
+    if (status === 'reward') {
+      const now = new Date().toISOString();
+      customer.redemptionCount = (customer.redemptionCount || 0) + 1;
+      customer.lastRedemptionAt = now;
+      db.redemptions.unshift({
+        id: crypto.randomUUID(), restaurantId: restaurant.id, rewardIdEntered: customer.rewardId,
+        result: 'valid', via: 'scan', visitCode: visit.code, customerId: customer.id, at: now,
+      });
+    }
+  }
+  return { code: visit.code, status: visit.scanStatus, at: visit.at, day: visit.day };
+}
+
 function maskPhone(p) { const d = String(p || '').replace(/\D/g, ''); return d.length >= 4 ? '•••-•••-' + d.slice(-4) : ''; }
 
 function writeDB(data) {
@@ -467,18 +495,19 @@ app.post('/api/public/checkin', async (req, res) => {
     db.customers.unshift(customer);
   }
   ensureDeviceToken(customer);
-  logVisit(db, customer, visitType, 'form');
+  const scan = processScan(db, restaurant, customer, logVisit(db, customer, visitType, 'form'));
   writeDB(db);
 
   // Welcome text with their Reward ID the moment a brand-new guest opts in.
   if (isNewCustomer) {
     const offer = restaurant.currentOffer ? `Your reward: ${restaurant.currentOffer}. ` : '';
     await notifyGuest(db, restaurant, customer, 'welcome', {
-      sms: `Welcome to the ${restaurant.restaurantName} loop! ${offer}Your Reward ID is ${customer.rewardId} - show it to staff on your next visit. Reply STOP to opt out.`,
+      sms: `Welcome to the ${restaurant.restaurantName} loop! ${offer}Your member ID is ${customer.rewardId}. Next visit, just scan the QR code or tap the tag at your table to get your reward. Reply STOP to opt out.`,
       subject: `Welcome to the ${restaurant.restaurantName} Loop! Here's your Reward ID`,
       html: `<p>Thanks for joining${customer.name ? ', ' + escHtml(customer.name) : ''}!</p>
         ${restaurant.currentOffer ? `<p>On your <b>next visit</b> you get: <b>${escHtml(restaurant.currentOffer)}</b></p>` : ''}
-        <p>Show this Reward ID to staff:</p>${rewardIdBlock(customer)}`,
+        <p>On your next visit, just scan the QR code or tap the tag at your table. Your phone shows a reward code for your server.</p>
+        <p>Your member ID:</p>${rewardIdBlock(customer)}`,
     });
     writeDB(db);
   }
@@ -488,6 +517,7 @@ app.post('/api/public/checkin', async (req, res) => {
     token: customer.deviceToken,
     status: passStatus(customer),
     isNewCustomer,
+    scan,
     offer: restaurant.currentOffer,
     restaurantName: restaurant.restaurantName,
   });
@@ -512,10 +542,11 @@ app.post('/api/public/returning', (req, res) => {
     const today = localDay(new Date());
     const alreadyToday = db.visits.some((v) => v.customerId === here.id && v.day === today);
     const visitType = cleanVisitType(req.body.visitType) || (alreadyToday ? '' : 'regular');
-    logVisit(db, here, visitType, 'saved_phone');
+    const scan = processScan(db, restaurant, here, logVisit(db, here, visitType, 'saved_phone'));
     writeDB(db);
     return res.json({
       member: true,
+      scan,
       customer: publicCustomer(here),
       status: passStatus(here),
       visitType: here.lastVisitType || '',
@@ -734,9 +765,9 @@ async function runFollowUpCheck() {
     if (!restaurant || !restaurant.currentOffer) continue;
 
     await notifyGuest(db, restaurant, customer, 'followup', {
-      sms: `Still thinking about ${restaurant.restaurantName}? Your offer is waiting: ${restaurant.currentOffer}. Show Reward ID ${customer.rewardId || ''} to staff. Reply STOP to opt out.`,
+      sms: `Still thinking about ${restaurant.restaurantName}? Your offer is waiting: ${restaurant.currentOffer}. Just scan the QR code at your table when you come in. Reply STOP to opt out.`,
       subject: `Your reward at ${restaurant.restaurantName} is waiting`,
-      html: `<p>Your reward is still waiting: <b>${escHtml(restaurant.currentOffer)}</b></p><p>Show this Reward ID to staff on your next visit:</p>${rewardIdBlock(customer)}`,
+      html: `<p>Your reward is still waiting: <b>${escHtml(restaurant.currentOffer)}</b></p><p>Next time you're in, just scan the QR code or tap the tag at your table and show your server the reward code.</p>`,
     });
     customer.followUpSentAt = new Date().toISOString();
   }
@@ -763,11 +794,11 @@ async function runFirstVisitEmailCheck() {
     const hi = customer.name ? `Hi ${escHtml(customer.name)}, thanks` : 'Thanks';
     await notifyGuest(db, restaurant, customer, 'first_visit_followup', {
       preferEmail: true,
-      sms: `Thanks for visiting ${restaurant.restaurantName}! Your Reward ID is ${customer.rewardId}${restaurant.currentOffer ? ` - show it next time for ${restaurant.currentOffer}` : ''}.${link ? ` Enjoyed it? A quick Google review helps a lot: ${link}` : ''} Reply STOP to opt out.`,
-      subject: `Thanks for visiting ${restaurant.restaurantName}! Your Reward ID inside`,
+      sms: `Thanks for visiting ${restaurant.restaurantName}! Next visit, scan the QR code at your table${restaurant.currentOffer ? ` for ${restaurant.currentOffer}` : ' for your reward'}.${link ? ` Enjoyed it? A quick Google review helps a lot: ${link}` : ''} Reply STOP to opt out.`,
+      subject: `Thanks for visiting ${restaurant.restaurantName}!`,
       html: `<p>${hi} for coming in today!</p>
-        <p>Here's your Reward ID. Show it to staff on your <b>next visit</b>${restaurant.currentOffer ? ` to get <b>${escHtml(restaurant.currentOffer)}</b>` : ''}:</p>
-        ${rewardIdBlock(customer)}
+        <p>On your <b>next visit</b>, just scan the QR code or tap the tag at your table${restaurant.currentOffer ? ` to get <b>${escHtml(restaurant.currentOffer)}</b>` : ''}. Your phone will show a reward code for your server.</p>
+        <p>Your member ID:</p>${rewardIdBlock(customer)}
         ${link ? `<p style="margin-top:20px">Enjoyed your visit? A quick Google review helps a local restaurant more than you'd think:</p>
         <p><a href="${escHtml(link)}" style="display:inline-block;background:#c67139;color:#fff;padding:12px 20px;border-radius:999px;text-decoration:none">Leave a Google review</a></p>` : ''}`,
     }, { includesReview: !!link });

@@ -41,6 +41,10 @@
   .step.active { display: block; }
   @keyframes pop { from { transform: scale(0.7); opacity:0;} to { transform: scale(1); opacity:1;} }
   .pop-in { animation: pop 0.35s ease-out; }
+  @keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.6); opacity: .4; } }
+  .live-dot { width: 10px; height: 10px; border-radius: 9999px; background: #f9f4ed; animation: pulse 1s infinite; }
+  .bg-scan-new { background-color: #2f5d8a; }
+  .bg-scan-used { background-color: #645c50; }
 </style>
 </head>
 <body class="font-body text-ink antialiased min-h-screen flex flex-col items-center">
@@ -87,18 +91,26 @@
     </div>
   </div>
 
-  <!-- STEP 2: REWARD ID (new and returning guests) -->
+  <!-- STEP 2: TODAY'S VISIT CODE (the server reads this, no device needed) -->
   <div id="step-2" class="step">
-    <div class="ticket bg-paper2 border border-line rounded-[32px] p-7 pop-in text-center">
-      <p id="pass-heading" class="font-mono text-[11px] uppercase tracking-widest text-amberdeep mb-2">You're In The Loop</p>
-      <p class="text-inksoft text-sm mb-1">Your Reward ID</p>
-      <p id="reward-id" class="font-code font-semibold text-4xl tracking-wider mb-2">—</p>
-      <p id="visit-number" class="font-mono text-[11px] uppercase tracking-widest text-inksoft mb-4"></p>
-      <div class="ticket-perf my-5"></div>
-      <div id="status-box" class="rounded-2xl px-4 py-3 mb-4 text-sm"></div>
-      <h2 id="pass-offer-text" class="font-display text-3xl mb-4">—</h2>
-      <p id="pass-note" class="text-inksoft text-xs mb-5">Screenshot this to keep it handy.</p>
-      <div class="text-left border-t border-line pt-5">
+    <div id="scan-card" class="rounded-[32px] p-7 pop-in text-center text-paper2 bg-okgreen">
+      <p id="pass-heading" class="font-mono text-[11px] uppercase tracking-widest opacity-90 mb-1">You're In The Loop</p>
+      <p id="scan-label" class="font-display text-4xl leading-tight mb-1">REWARD</p>
+      <p id="scan-sub" class="text-sm opacity-95 mb-5">Show this screen to your server</p>
+      <p class="font-mono text-[11px] uppercase tracking-widest opacity-90 mb-1">Today's code</p>
+      <p id="visit-code" class="font-code font-semibold text-6xl tracking-wider mb-3">—</p>
+      <div class="flex items-center justify-center gap-2 font-code text-lg mb-1">
+        <span class="live-dot"></span><span id="live-clock">--:--:--</span>
+      </div>
+      <p id="live-date" class="text-xs opacity-90 mb-5"></p>
+      <h2 id="pass-offer-text" class="font-display text-2xl bg-paper2/15 rounded-2xl px-4 py-3">—</h2>
+    </div>
+
+    <div class="ticket bg-paper2 border border-line rounded-[32px] p-6 mt-5 text-center">
+      <p id="visit-number" class="font-mono text-[11px] uppercase tracking-widest text-inksoft mb-1"></p>
+      <p class="text-inksoft text-xs">Member ID <span id="reward-id" class="font-code font-semibold text-ink">—</span></p>
+      <p id="pass-note" class="text-inksoft text-xs mt-2">This phone is remembered: next time just scan, no form.</p>
+      <div class="text-left border-t border-line pt-5 mt-5">
         <label for="today-visit" class="font-mono text-[11px] uppercase tracking-wider text-inksoft mb-2 block">What brings you in today?</label>
         <select id="today-visit" class="w-full bg-paper border border-line rounded-full px-4 py-3 mb-4 text-ink focus:outline-none focus:border-amber appearance-none">
           <option value="" disabled selected>Choose one…</option>

@@ -28,31 +28,40 @@ function consentText() {
   return `Yes, text or email me my Reward ID and occasional offers from ${restaurantName}. Msg frequency varies. Msg & data rates may apply. Reply STOP or unsubscribe anytime.`;
 }
 
+const SCAN_LOOK = {
+  reward: { cls: 'bg-okgreen', label: 'REWARD', sub: 'Show this screen to your server' },
+  new: { cls: 'bg-scan-new', label: 'WELCOME!', sub: 'New member. Your reward starts on your next visit' },
+  used: { cls: 'bg-scan-used', label: 'USED TODAY', sub: 'Rewards are once per day. See you next time!' },
+};
+
+let clockTimer = null;
+function startClock() {
+  const tick = () => {
+    const now = new Date();
+    document.getElementById('live-clock').textContent = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+    document.getElementById('live-date').textContent = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  };
+  tick();
+  if (!clockTimer) clockTimer = setInterval(tick, 1000);
+}
+
 function showPass(data, heading) {
   currentOffer = data.offer || currentOffer;
-  document.getElementById('reward-id').textContent = data.customer.rewardId;
-  document.getElementById('pass-heading').textContent = heading;
-  const box = document.getElementById('status-box');
-  const offerEl = document.getElementById('pass-offer-text');
-  const note = document.getElementById('pass-note');
-  offerEl.textContent = currentOffer || 'Your reward';
   const c = data.customer || {};
+  const scan = data.scan || {};
+  const look = SCAN_LOOK[scan.status] || SCAN_LOOK.new;
+  document.getElementById('scan-card').className = `rounded-[32px] p-7 pop-in text-center text-paper2 ${look.cls}`;
+  document.getElementById('pass-heading').textContent = heading;
+  document.getElementById('scan-label').textContent = look.label;
+  document.getElementById('scan-sub').textContent = look.sub;
+  document.getElementById('visit-code').textContent = scan.code || '—';
+  document.getElementById('pass-offer-text').textContent =
+    scan.status === 'reward' ? (currentOffer || 'Your reward') : scan.status === 'new' ? `Next time: ${currentOffer || 'your reward'}` : 'Thanks for coming back!';
+  document.getElementById('reward-id').textContent = c.rewardId || '—';
   document.getElementById('visit-number').textContent =
     `${c.memberNumber ? `Member #${c.memberNumber} · ` : ''}Visit #${c.visitNumber || 1}`;
-  if (data.status === 'redeemed_today') {
-    box.className = 'rounded-2xl px-4 py-3 mb-4 text-sm bg-paper border border-line text-inksoft';
-    box.textContent = '✓ Reward already used today. Rewards are once per day, so come back tomorrow for your next one:';
-  } else if (data.status === 'joined_today') {
-    box.className = 'rounded-2xl px-4 py-3 mb-4 text-sm bg-paper border border-line text-inksoft';
-    box.textContent = 'You\'re in! On your NEXT visit, show this ID to staff to get:';
-  } else {
-    box.className = 'rounded-2xl px-4 py-3 mb-4 text-sm bg-okgreen text-paper2 font-semibold';
-    box.textContent = 'Ready to redeem: show this ID to staff to get:';
-  }
-  note.textContent = data.isNewCustomer === false || data.member
-    ? 'This phone is remembered: next time just scan, no form.'
-    : 'We also texted it to you. This phone is remembered: next time just scan, no form.';
   if (data.visitType) document.getElementById('today-visit').value = data.visitType;
+  startClock();
   showStep(2);
 }
 
