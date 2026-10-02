@@ -96,7 +96,7 @@
             <th class="px-5 py-3 font-medium">Restaurant</th>
             <th class="px-5 py-3 font-medium">Contact</th>
             <th class="px-5 py-3 font-medium">Slowest Night</th>
-            <th class="px-5 py-3 font-medium">Current Offer</th>
+            <th class="px-5 py-3 font-medium">Every-visit reward</th>
             <th class="px-5 py-3 font-medium">Stage</th>
           </tr>
         </thead>
@@ -195,25 +195,59 @@
         </div>
       </div>
       <div>
-        <label class="font-mono text-xs uppercase tracking-wider text-inkmute mb-1 block">Current Offer</label>
-        <input id="f-currentOffer" type="text" placeholder="e.g. Free flatbread, Mon–Thu" class="w-full bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
-      </div>
-      <div>
         <label class="font-mono text-xs uppercase tracking-wider text-inkmute mb-1 block">Google Review Link</label>
         <input id="f-googleReviewLink" type="url" placeholder="https://g.page/your-restaurant/review" class="w-full bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
           <label class="block text-xs font-mono uppercase tracking-wider text-inkmute mt-3 mb-1">Staff PIN (4 digits)</label>
           <input id="f-staffPin" type="text" inputmode="numeric" maxlength="4" pattern="\d{4}" class="w-full bg-bg border border-hair rounded-full px-4 py-2 text-sm font-code focus:outline-none focus:border-teal">
       </div>
-      <div>
-        <label class="font-mono text-xs uppercase tracking-wider text-inkmute mb-1 block">Bonus prizes (streaks &amp; badges)</label>
-        <p class="text-xs text-inkmute mb-2">Guests win these on their 3rd, 5th and 10th visit, and for coming in 4 weeks in a row. Leave blank to use the example shown.</p>
-        <div class="grid grid-cols-2 gap-2">
-          <input id="f-prize3" type="text" placeholder="3rd visit: Free dessert" aria-label="3rd visit prize" class="w-full bg-bg border border-hair rounded-full px-4 py-2 text-sm focus:outline-none focus:border-teal">
-          <input id="f-prize5" type="text" placeholder="5th visit: Free appetizer" aria-label="5th visit prize" class="w-full bg-bg border border-hair rounded-full px-4 py-2 text-sm focus:outline-none focus:border-teal">
-          <input id="f-prize10" type="text" placeholder="10th visit: Free entrée" aria-label="10th visit prize" class="w-full bg-bg border border-hair rounded-full px-4 py-2 text-sm focus:outline-none focus:border-teal">
-          <input id="f-prizestreak4" type="text" placeholder="4-week streak: Free drink" aria-label="4-week streak prize" class="w-full bg-bg border border-hair rounded-full px-4 py-2 text-sm focus:outline-none focus:border-teal">
+      <fieldset class="rounded-3xl bg-[#e6edd5] p-4 space-y-4 border-0">
+        <legend class="sr-only">Rewards</legend>
+        <div>
+          <p class="font-display text-xl">What guests get</p>
+          <p class="text-xs text-inkmute">Shown on the guest's phone and in their emails. Leave a prize blank to use the example in the box.</p>
         </div>
-      </div>
+        <div>
+          <p class="font-mono text-[11px] uppercase tracking-wider text-amberdeep mb-2">Every visit</p>
+          <div class="min-w-0">
+            <label for="f-currentOffer" class="text-sm font-semibold block mb-1">Reward for every return visit</label><span class="block text-xs text-inkmute mb-1">First-time guests unlock it on their next visit, then once per day.</span>
+            <input id="f-currentOffer" type="text" placeholder="e.g. Free fries" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          </div>
+        </div>
+        <div>
+          <p class="font-mono text-[11px] uppercase tracking-wider text-amberdeep mb-2">Visit milestones</p>
+          <div class="grid sm:grid-cols-3 gap-3">
+          <div class="min-w-0">
+            <label for="f-prize3" class="text-sm font-semibold block mb-1">3rd visit</label>
+            <input id="f-prize3" type="text" placeholder="Free dessert" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          </div>
+          <div class="min-w-0">
+            <label for="f-prize5" class="text-sm font-semibold block mb-1">5th visit</label>
+            <input id="f-prize5" type="text" placeholder="Free appetizer" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          </div>
+          <div class="min-w-0">
+            <label for="f-prize10" class="text-sm font-semibold block mb-1">10th visit</label>
+            <input id="f-prize10" type="text" placeholder="Free entrée" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          </div>
+          </div>
+        </div>
+        <div>
+          <p class="font-mono text-[11px] uppercase tracking-wider text-teal mb-2">Weekly streaks</p>
+          <div class="grid sm:grid-cols-3 gap-3">
+          <div class="min-w-0">
+            <label for="f-prizestreak2" class="text-sm font-semibold block mb-1">2 weeks in a row</label>
+            <input id="f-prizestreak2" type="text" placeholder="Badge only" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          </div>
+          <div class="min-w-0">
+            <label for="f-prizestreak4" class="text-sm font-semibold block mb-1">4 weeks in a row</label>
+            <input id="f-prizestreak4" type="text" placeholder="Free drink" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          </div>
+          <div class="min-w-0">
+            <label for="f-prizestreak8" class="text-sm font-semibold block mb-1">8 weeks in a row</label>
+            <input id="f-prizestreak8" type="text" placeholder="Badge only" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          </div>
+          </div>
+        </div>
+      </fieldset>
       <p id="live-since-display" class="hidden font-mono text-xs text-teal">● Live client since —</p>
       <div>
         <label class="font-mono text-xs uppercase tracking-wider text-inkmute mb-1 block">Notes</label>
@@ -247,9 +281,9 @@
       <h3 class="font-display text-xl mb-1">Customers <span id="customers-count" class="text-inkmute font-body font-normal text-sm"></span></h3>
       <p class="text-inkmute text-sm mb-4">Everyone who's checked in at this restaurant.</p>
       <div id="customers-list" class="space-y-2 mb-4 max-h-56 overflow-y-auto"></div>
-      <div class="grid grid-cols-[1fr_1fr_auto] gap-2 mb-6">
-        <input id="cust-name" type="text" placeholder="Name" class="bg-bg border border-hair rounded-full px-3 py-2 text-sm focus:outline-none focus:border-teal">
-        <input id="cust-phone" type="tel" placeholder="Phone" class="bg-bg border border-hair rounded-full px-3 py-2 text-sm focus:outline-none focus:border-teal">
+      <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 mb-6">
+        <input id="cust-name" type="text" placeholder="Name" class="min-w-0 bg-bg border border-hair rounded-full px-3 py-2 text-sm focus:outline-none focus:border-teal">
+        <input id="cust-phone" type="tel" placeholder="Phone" class="min-w-0 bg-bg border border-hair rounded-full px-3 py-2 text-sm focus:outline-none focus:border-teal">
         <button id="btn-add-customer" class="bg-teal text-bg font-semibold text-sm px-4 rounded-full hover:bg-amber transition">Add</button>
       </div>
 
@@ -257,7 +291,7 @@
       <p class="text-inkmute text-sm mb-3">Texts everyone in the selected audience right now. STOP opt-out is added automatically.</p>
       <textarea id="promo-message" rows="2" placeholder="e.g. Flash deal tonight — free dessert with any entrée!" class="w-full bg-bg border border-hair rounded-2xl px-3 py-2.5 text-sm mb-3 focus:outline-none focus:border-teal resize-none"></textarea>
       <div class="flex gap-2 mb-3">
-        <select id="promo-audience" class="flex-1 bg-bg border border-hair rounded-full px-3 py-2 text-sm focus:outline-none focus:border-teal">
+        <select id="promo-audience" class="flex-1 min-w-0 bg-bg border border-hair rounded-full px-3 py-2 text-sm focus:outline-none focus:border-teal">
           <option value="all">All customers</option>
           <option value="new">New (0 redemptions)</option>
           <option value="returning">Returning (1+ redemptions)</option>
@@ -269,12 +303,12 @@
       <h3 class="font-display text-xl mb-1">Automate a Promotion</h3>
       <p class="text-inkmute text-sm mb-3">Repeats every week on the day you pick — no manual sending required.</p>
       <textarea id="auto-message" rows="2" placeholder="e.g. It's Wednesday — free dessert with any entrée tonight!" class="w-full bg-bg border border-hair rounded-2xl px-3 py-2.5 text-sm mb-3 focus:outline-none focus:border-teal resize-none"></textarea>
-      <div class="flex gap-2 mb-3">
+      <div class="flex flex-wrap gap-2 mb-3">
         <select id="auto-day" class="bg-bg border border-hair rounded-full px-3 py-2 text-sm focus:outline-none focus:border-teal">
           <option>Sunday</option><option>Monday</option><option>Tuesday</option>
           <option selected>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option>
         </select>
-        <select id="auto-audience" class="flex-1 bg-bg border border-hair rounded-full px-3 py-2 text-sm focus:outline-none focus:border-teal">
+        <select id="auto-audience" class="flex-1 min-w-[150px] bg-bg border border-hair rounded-full px-3 py-2 text-sm focus:outline-none focus:border-teal">
           <option value="all">All customers</option>
           <option value="new">New (0 redemptions)</option>
           <option value="returning">Returning (1+ redemptions)</option>
