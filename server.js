@@ -157,8 +157,7 @@ const SCAN_LETTERS = { reward: 'R', new: 'N', used: 'X', bonus: 'B' };
 // streak unlock bonus prizes the owner sets in the CRM (sensible defaults until they do).
 const VISIT_MILESTONES = [3, 5, 10];
 const STREAK_BADGES = [2, 4, 8];
-const STREAK_PRIZE_WEEKS = 4;
-const DEFAULT_PRIZES = { 3: 'Free dessert', 5: 'Free appetizer', 10: 'Free entrée', streak4: 'Free drink' };
+const DEFAULT_PRIZES = { 3: 'Free dessert', 5: 'Free appetizer', 10: 'Free entrée', streak2: '', streak4: 'Free drink', streak8: '' };
 function prizeFor(restaurant, key) {
   const v = restaurant[`prize${key}`];
   return (v && String(v).trim()) || DEFAULT_PRIZES[key];
@@ -194,7 +193,7 @@ function progressFor(db, restaurant, customer) {
   const badges = [
     ...VISIT_MILESTONES.map((n) => ({ id: `v${n}`, kind: 'visits', n, label: `${n} visits`, prize: prizeFor(restaurant, n), earned: visits >= n })),
     ...STREAK_BADGES.map((n) => ({ id: `s${n}`, kind: 'streak', n, label: `${n}-week streak`,
-      prize: n === STREAK_PRIZE_WEEKS ? prizeFor(restaurant, 'streak4') : '', earned: best >= n })),
+      prize: prizeFor(restaurant, `streak${n}`), earned: best >= n })),
   ];
   const nextVisit = VISIT_MILESTONES.find((n) => visits < n);
   return {
@@ -234,7 +233,7 @@ function processScan(db, restaurant, customer, visit) {
     STREAK_BADGES.forEach((n) => {
       if (customer.bestStreak >= n && !customer.awarded.includes(`s${n}`)) {
         customer.awarded.push(`s${n}`);
-        const prize = n === STREAK_PRIZE_WEEKS ? prizeFor(restaurant, 'streak4') : '';
+        const prize = prizeFor(restaurant, `streak${n}`);
         newBadges.push({ id: `s${n}`, kind: 'streak', label: `${n}-week streak`, prize });
         if (prize) prizes.push(prize);
       }
@@ -355,7 +354,9 @@ app.post('/api/leads', (req, res) => {
     prize3: req.body.prize3 || '',
     prize5: req.body.prize5 || '',
     prize10: req.body.prize10 || '',
+    prizestreak2: req.body.prizestreak2 || '',
     prizestreak4: req.body.prizestreak4 || '',
+    prizestreak8: req.body.prizestreak8 || '',
     stage,
     liveSince: stage === 'Live Client' ? now : null,
     notes: req.body.notes || '',
@@ -1119,7 +1120,8 @@ async function runStreakReminders() {
     const restaurant = db.leads.find((l) => l.id === customer.restaurantId);
     if (!restaurant) continue;
     const next = s.weeks + 1;
-    const unlock = next === STREAK_PRIZE_WEEKS ? ` Week ${next} unlocks: ${prizeFor(restaurant, 'streak4')}!` : '';
+    const nextPrize = STREAK_BADGES.includes(next) ? prizeFor(restaurant, `streak${next}`) : '';
+    const unlock = nextPrize ? ` Week ${next} unlocks: ${nextPrize}!` : '';
     await notifyGuest(db, restaurant, customer, 'streak_reminder', {
       preferEmail: true,
       sms: `Your ${s.weeks}-week streak at ${restaurant.restaurantName} ends Sunday. Stop in this week to keep it alive.${unlock} Reply STOP to opt out.`,
