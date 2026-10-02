@@ -6,9 +6,11 @@ const stageColors = {
   0: 'border-hair',
   1: 'border-hair',
   2: 'border-hair',
-  3: 'border-amber/50',
-  4: 'border-teal/50',
+  3: 'border-amber/60',
+  4: 'border-teal/60',
 };
+// Colored pill for each stage name (same green/orange as the landing page)
+const stageHeads = ['bg-hair text-ink', 'bg-[#fbe3d2] text-amberdeep', 'bg-[#fbe3d2] text-amberdeep', 'bg-amber text-white', 'bg-teal text-white'];
 
 async function init() {
   STAGES = await fetch('/api/stages').then((r) => r.json());
@@ -92,8 +94,8 @@ function renderPipeline() {
     const items = LEADS.filter((l) => l.stage === stage);
     return `
       <div class="stage-col card p-3 border-2 ${stageColors[i] === 'border-hair' ? 'border-transparent' : stageColors[i]} flex flex-col min-h-[200px]" data-stage="${escapeHtml(stage)}">
-        <p class="font-mono text-[11px] uppercase tracking-wider text-inkmute mb-3 flex items-center justify-between">
-          <span>${stage}</span><span class="text-ink">${items.length}</span>
+        <p class="stage-head ${stageHeads[i] || 'bg-hair text-ink'} font-mono text-[11px] uppercase tracking-wider mb-3 flex items-center justify-between gap-2">
+          <span>${stage}</span><span>${items.length}</span>
         </p>
         <div class="space-y-2 flex-1">
           ${items.map((l) => leadCard(l, i)).join('') || '<p class="text-inkmute text-xs text-center py-6">Drop a lead here</p>'}
