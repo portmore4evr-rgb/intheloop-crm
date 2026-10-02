@@ -50,14 +50,14 @@
   .hero { background: var(--green-deep); color: var(--cream); position: relative; overflow: hidden; }
   .hero::before { content: ""; position: absolute; width: 620px; height: 620px; border-radius: 50%; background: var(--green); right: -160px; top: -120px; opacity: .55; }
   .hero::after { content: ""; position: absolute; width: 280px; height: 280px; border-radius: 50%; background: var(--orange); left: -120px; bottom: -150px; opacity: .35; }
-  .hero .wrap { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 48px; align-items: center; padding-block: 72px 88px; }
+  .hero .wrap { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 48px; align-items: center; padding-block: 72px 88px; }
   .pill { display: inline-block; background: rgba(242,193,78,.16); color: var(--gold); font-weight: 700; font-size: 14px; padding: 7px 16px; border-radius: 999px; margin-bottom: 22px; }
   .hero h1 { font-size: clamp(46px, 7vw, 82px); line-height: .98; margin-bottom: 22px; }
   .hero h1 em { font-style: normal; color: var(--orange-bright); }
   .hero .lede { font-size: 20px; color: #e3dccb; max-width: 34em; margin-bottom: 32px; }
   .hero .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
   .hero .fine { font-size: 14px; color: #c9c0ad; margin-top: 18px; }
-  @media (max-width: 900px) { .hero .wrap { grid-template-columns: minmax(0, 1fr); padding-block: 48px 64px; } }
+  @media (max-width: 900px) { .hero .wrap { grid-template-columns: minmax(0, 1fr); padding-block: 28px 64px; gap: 32px; } .hero-video { order: -1; } }
 
   /* phone mockup */
   .phone-stage { position: relative; display: flex; justify-content: center; padding: 10px 0 30px; }
@@ -145,6 +145,9 @@
   /* video */
   .video-sec { background: var(--green-light); }
   .video-frame { border-radius: 34px; overflow: hidden; background: var(--green); aspect-ratio: 16 / 9; position: relative; box-shadow: 0 20px 44px rgba(47,58,34,.25); max-width: 980px; }
+  .hero-video { display: grid; gap: 12px; }
+  .hero .video-frame { border: 4px solid rgba(245,234,216,.18); box-shadow: 0 30px 60px rgba(0,0,0,.35); }
+  .video-note { color: #c9c0ad; font-size: 15px; text-align: center; }
   .video-frame video { width: 100%; height: 100%; object-fit: cover; display: block; }
   #vsl-missing { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; padding: 32px; color: var(--cream); background: radial-gradient(circle at 80% 20%, var(--green-mid), var(--green) 60%); }
   #vsl-missing.hidden { display: none; }
@@ -230,35 +233,17 @@
       <p class="fine">Free for 30 days. No app for guests, no tablet for servers.</p>
     </div>
 
-    <div class="phone-stage" aria-label="Example: a guest's phone showing a green reward screen and a 4-week streak">
-      <div class="phone">
-        <div class="screen">
-          <p class="rest">Mama's Kitchen</p>
-          <div class="pass green">
-            <p class="lbl">REWARD</p>
-            <p class="sub">Show this screen to your server</p>
-            <p class="code">R-0143</p>
-            <p class="clock"><span class="live-dot"></span><span id="hero-clock">7:42:18 PM</span></p>
-            <p class="prize">Free fries</p>
-          </div>
-          <div class="mini-streak">
-            <div class="row"><span><span class="n">4</span> week streak</span>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="#e0894d" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
-            <div class="dots">
-              <span class="dot"></span><span class="dot"></span>
-              <span class="dot on"><svg width="12" height="12" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span>
-              <span class="dot on"><svg width="12" height="12" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span>
-              <span class="dot on"><svg width="12" height="12" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span>
-              <span class="dot on"><svg width="12" height="12" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span>
-            </div>
-          </div>
+    <div class="hero-video">
+      <div class="video-frame">
+        <video id="vsl" controls playsinline preload="metadata" poster="/media/media/intheloop-vsl-poster.jpg">
+          <source src="/media/media/intheloop-vsl.mp4" type="video/mp4">
+        </video>
+        <div id="vsl-missing" class="hidden">
+          <p>Video coming soon</p>
+          <p>Book a meeting below and we'll show you live.</p>
         </div>
       </div>
-      <div class="float-badge">
-        <div class="hex" style="width:52px;height:58px;background:#f2c14e"><div class="hex" style="width:40px;height:44px;background:#c67139">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg></div></div>
-        <div><small>New badge · 5 visits</small><b>Won: Free appetizer</b></div>
-      </div>
+      <p class="video-note">Watch the 60-second tour <span aria-hidden="true">▶</span> sound on</p>
     </div>
   </div>
 </div>
@@ -344,25 +329,6 @@
         <div><div class="hex" style="width:56px;height:62px;margin:0 auto 6px;background:#f2c14e"><div class="hex" style="width:44px;height:48px;background:#c67139"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg></div></div>3 visits<small>Free dessert</small></div>
         <div><div class="hex" style="width:56px;height:62px;margin:0 auto 6px;background:#8fa36a"><div class="hex" style="width:44px;height:48px;background:#56633f"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div></div>4-week streak<small>Free drink</small></div>
         <div class="off"><div class="hex" style="width:56px;height:62px;margin:0 auto 6px;background:rgba(249,244,237,.14)"><div class="hex" style="width:44px;height:48px;background:rgba(249,244,237,.08)"><svg width="18" height="18" viewBox="0 0 24 24" fill="rgba(249,244,237,.35)" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg></div></div>10 visits<small>Free entrée</small></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- VIDEO -->
-<section class="video-sec">
-  <div class="wrap">
-    <div class="section-head">
-      <p class="eyebrow" style="color:var(--green)">Watch</p>
-      <h2>See it at a real table.</h2>
-    </div>
-    <div class="video-frame">
-      <video id="vsl" controls playsinline preload="metadata" poster="/media/media/intheloop-vsl-poster.jpg">
-        <source src="/media/media/intheloop-vsl.mp4" type="video/mp4">
-      </video>
-      <div id="vsl-missing" class="hidden">
-        <p>Video coming soon</p>
-        <p>Book a meeting below and we'll show you live.</p>
       </div>
     </div>
   </div>
