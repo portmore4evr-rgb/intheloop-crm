@@ -290,6 +290,7 @@ function openModal(id) {
     document.getElementById('f-stage').value = lead.stage;
     document.getElementById('f-currentOffer').value = lead.currentOffer || '';
     document.getElementById('f-googleReviewLink').value = lead.googleReviewLink || '';
+    ['3', '5', '10', 'streak4'].forEach((k) => { document.getElementById(`f-prize${k}`).value = lead[`prize${k}`] || ''; });
     document.getElementById('f-notes').value = lead.notes || '';
     document.getElementById('f-staffPin').value = lead.staffPin || '';
     document.getElementById('redeem-link-display').textContent = `${window.location.origin}/redeem/${lead.id}`;
@@ -383,6 +384,10 @@ async function saveLead() {
     stage: document.getElementById('f-stage').value,
     currentOffer: document.getElementById('f-currentOffer').value,
     googleReviewLink: document.getElementById('f-googleReviewLink').value,
+    prize3: document.getElementById('f-prize3').value.trim(),
+    prize5: document.getElementById('f-prize5').value.trim(),
+    prize10: document.getElementById('f-prize10').value.trim(),
+    prizestreak4: document.getElementById('f-prizestreak4').value.trim(),
     notes: document.getElementById('f-notes').value,
   };
   const pin = document.getElementById('f-staffPin').value.trim();

@@ -32,7 +32,79 @@ const SCAN_LOOK = {
   reward: { cls: 'bg-okgreen', label: 'REWARD', sub: 'Show this screen to your server' },
   new: { cls: 'bg-scan-new', label: 'WELCOME!', sub: 'New member. Your reward starts on your next visit' },
   used: { cls: 'bg-scan-used', label: 'USED TODAY', sub: 'Rewards are once per day. See you next time!' },
+  bonus: { cls: 'bg-scan-bonus', label: 'BONUS PRIZE', sub: 'You unlocked a bigger prize! Show this screen to your server' },
 };
+
+const BOLT = '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>';
+const STAR = '<path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/>';
+
+function renderProgress(p) {
+  if (!p) { document.getElementById('progress-card').hidden = true; return; }
+  document.getElementById('progress-card').hidden = false;
+  document.getElementById('streak-num').textContent = p.streak;
+  const weeks = document.getElementById('streak-weeks');
+  weeks.innerHTML = p.lastWeeks.map((w) => `
+    <div class="flex flex-col items-center gap-1.5">
+      <span class="text-[10px] ${w.current ? 'text-[#f2c14e] font-semibold' : 'text-[#a99f8f]'}">${w.label}</span>
+      <span class="wk-dot" style="background:${w.visited ? '#c67139' : 'rgba(249,244,237,.12)'}">
+        ${w.visited ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="#f9f4ed" aria-hidden="true">${BOLT}</svg>` : ''}
+      </span>
+    </div>`).join('');
+  const msg = document.getElementById('streak-msg');
+  if (p.streak === 0) msg.textContent = 'Visit once a week to start a streak. 4 weeks in a row wins a prize.';
+  else if (p.atRisk) msg.textContent = `Come in by Sunday to keep your ${p.streak}-week streak alive!`;
+  else if (p.streak === 1) msg.textContent = "You're on the board! Come back next week to build your streak.";
+  else msg.textContent = `Way to go! ${p.streak} weeks in a row. Keep your streak alive.`;
+
+  const next = document.getElementById('next-prize');
+  if (p.next) {
+    next.hidden = false;
+    document.getElementById('next-remaining').textContent =
+      `${p.next.remaining} more ${p.next.remaining === 1 ? 'visit' : 'visits'} until your ${ordinal(p.next.n)}-visit prize:`;
+    document.getElementById('next-prize-name').textContent = p.next.prize;
+    document.getElementById('next-bar').style.width = `${Math.min(100, Math.round((p.visits / p.next.n) * 100))}%`;
+  } else next.hidden = true;
+
+  document.getElementById('badge-grid').innerHTML = p.badges.map((b) => {
+    const on = b.earned;
+    const outer = on ? (b.kind === 'streak' ? '#8fa36a' : '#f2c14e') : 'rgba(249,244,237,.14)';
+    const inner = on ? (b.kind === 'streak' ? '#56633f' : '#c67139') : 'rgba(249,244,237,.08)';
+    const icon = b.kind === 'streak' ? BOLT : STAR;
+    return `<div class="flex flex-col items-center gap-1.5">
+      <div class="hex w-14 h-16 flex items-center justify-center" style="background:${outer}">
+        <div class="hex w-11 h-12 flex items-center justify-center" style="background:${inner}">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="${on ? '#f9f4ed' : 'rgba(249,244,237,.35)'}" aria-hidden="true">${icon}</svg>
+        </div>
+      </div>
+      <span class="text-xs font-semibold ${on ? '' : 'text-[#a99f8f]'}">${b.label}</span>
+      ${b.prize ? `<span class="text-[10px] leading-tight ${on ? 'text-[#f2c14e]' : 'text-[#a99f8f]'}">${escapeHtml(b.prize)}</span>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function ordinal(n) { return n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`; }
+function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
+
+let badgeQueue = [];
+function showNextBadge() {
+  const modal = document.getElementById('badge-modal');
+  const b = badgeQueue.shift();
+  if (!b) { modal.classList.add('hidden'); return; }
+  const streak = b.kind === 'streak';
+  document.getElementById('badge-hex-outer').style.background = streak ? '#8fa36a' : '#f2c14e';
+  document.getElementById('badge-hex-inner').style.background = streak ? '#56633f' : '#c67139';
+  document.getElementById('badge-icon').innerHTML = streak ? BOLT : STAR;
+  document.getElementById('badge-title').textContent = b.label;
+  document.getElementById('badge-body').textContent = streak
+    ? `That's ${b.label.split('-')[0]} weeks in a row at ${restaurantName}. Keep your streak alive!`
+    : `You've visited ${restaurantName} ${b.label}. Thanks for being a regular!`;
+  const prizeBox = document.getElementById('badge-prize');
+  if (b.prize) { prizeBox.classList.remove('hidden'); document.getElementById('badge-prize-name').textContent = b.prize; }
+  else prizeBox.classList.add('hidden');
+  document.getElementById('badge-close').textContent = badgeQueue.length ? 'Next badge' : 'See my progress';
+  modal.classList.remove('hidden');
+  if (window.celebrate) window.celebrate({ count: 220, origin: { x: 0.5, y: 0.3 } });
+}
 
 let clockTimer = null;
 function startClock() {
@@ -56,13 +128,21 @@ function showPass(data, heading) {
   document.getElementById('scan-sub').textContent = look.sub;
   document.getElementById('visit-code').textContent = scan.code || '—';
   document.getElementById('pass-offer-text').textContent =
-    scan.status === 'reward' ? (currentOffer || 'Your reward') : scan.status === 'new' ? `Next time: ${currentOffer || 'your reward'}` : 'Thanks for coming back!';
+    scan.status === 'bonus' ? scan.prize
+      : scan.status === 'reward' ? (currentOffer || 'Your reward')
+      : scan.status === 'new' ? `Next time: ${currentOffer || 'your reward'}` : 'Thanks for coming back!';
   document.getElementById('reward-id').textContent = c.rewardId || '—';
   document.getElementById('visit-number').textContent =
     `${c.memberNumber ? `Member #${c.memberNumber} · ` : ''}Visit #${c.visitNumber || 1}`;
   if (data.visitType) document.getElementById('today-visit').value = data.visitType;
   startClock();
+  renderProgress(data.progress);
   showStep(2);
+  badgeQueue = (scan.newBadges || []).slice();
+  if (badgeQueue.length) setTimeout(showNextBadge, 600);
+  else if (window.celebrate && (scan.status === 'reward' || scan.status === 'bonus' || (scan.status === 'new' && data.isNewCustomer))) {
+    setTimeout(() => window.celebrate({ count: scan.status === 'new' ? 120 : 180 }), 300);
+  }
 }
 
 async function loadRestaurant() {
@@ -192,6 +272,7 @@ function notMe() {
 }
 
 document.getElementById('today-submit').addEventListener('click', saveTodayVisit);
+document.getElementById('badge-close').addEventListener('click', showNextBadge);
 document.getElementById('join-btn').addEventListener('click', joinWithSavedInfo);
 document.getElementById('not-me').addEventListener('click', notMe);
 document.getElementById('join-not-me').addEventListener('click', notMe);
