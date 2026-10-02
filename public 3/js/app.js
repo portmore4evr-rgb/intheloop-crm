@@ -91,45 +91,129 @@ function renderPipeline() {
   board.innerHTML = STAGES.map((stage, i) => {
     const items = LEADS.filter((l) => l.stage === stage);
     return `
-      <div class="card p-3 border-2 ${stageColors[i] === 'border-hair' ? 'border-transparent' : stageColors[i]} flex flex-col min-h-[200px]">
+      <div class="stage-col card p-3 border-2 ${stageColors[i] === 'border-hair' ? 'border-transparent' : stageColors[i]} flex flex-col min-h-[200px]" data-stage="${escapeHtml(stage)}">
         <p class="font-mono text-[11px] uppercase tracking-wider text-inkmute mb-3 flex items-center justify-between">
           <span>${stage}</span><span class="text-ink">${items.length}</span>
         </p>
         <div class="space-y-2 flex-1">
-          ${items.map((l) => leadCard(l, i)).join('') || '<p class="text-inkmute text-xs text-center py-6">Empty</p>'}
+          ${items.map((l) => leadCard(l, i)).join('') || '<p class="text-inkmute text-xs text-center py-6">Drop a lead here</p>'}
         </div>
       </div>
     `;
   }).join('');
-
-  board.querySelectorAll('[data-open]').forEach((el) => {
-    el.addEventListener('click', () => openModal(el.dataset.open));
-  });
-  board.querySelectorAll('[data-advance]').forEach((el) => {
-    el.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const id = el.dataset.advance;
-      const nextIdx = parseInt(el.dataset.nextIdx, 10);
-      await fetch(`/api/leads/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage: STAGES[nextIdx] }),
-      });
-      await refreshLeads();
-      renderCurrentTab();
-    });
-  });
+  board.querySelectorAll('[data-open]').forEach(enableDrag);
 }
 
 function leadCard(lead, stageIdx) {
-  const canAdvance = stageIdx < STAGES.length - 1;
+  const isLive = stageIdx === STAGES.length - 1;
   return `
-    <div class="bg-bg border border-transparent rounded-2xl p-3 cursor-pointer hover:border-amber transition" data-open="${lead.id}">
+    <div class="lead-card bg-bg border border-transparent rounded-2xl p-3 hover:border-amber transition" data-open="${lead.id}" title="Drag to another stage, or click to open">
       <p class="text-sm font-semibold mb-1">${escapeHtml(lead.restaurantName)}</p>
-      <p class="text-xs text-inkmute mb-2">${escapeHtml(lead.contactName || 'No contact yet')}</p>
-      ${canAdvance ? `<button data-advance="${lead.id}" data-next-idx="${stageIdx + 1}" class="w-full font-mono text-[10px] uppercase tracking-wider leading-tight border border-teal text-teal rounded-full px-2 py-1.5 hover:bg-teal hover:text-bg transition">Move to ${STAGES[stageIdx + 1]} →</button>` : `<span class="font-mono text-[10px] uppercase tracking-wider text-teal">● Active Client</span>`}
+      <p class="text-xs text-inkmute">${escapeHtml(lead.contactName || 'No contact yet')}</p>
+      ${isLive ? '<span class="font-mono text-[10px] uppercase tracking-wider text-teal block mt-2">● Active Client</span>' : ''}
     </div>
   `;
+}
+
+// ---- Drag a lead card to another stage (mouse: just drag; touch: press and hold, then drag) ----
+let drag = null;
+
+function enableDrag(card) {
+  card.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    drag = { card, id: card.dataset.open, x: e.clientX, y: e.clientY, active: false, pointerId: e.pointerId,
+             touch: e.pointerType === 'touch', holdTimer: null };
+    if (drag.touch) drag.holdTimer = setTimeout(() => { if (drag && !drag.active) startDrag(drag.x, drag.y); }, 300);
+  });
+}
+
+function startDrag(x, y) {
+  drag.active = true;
+  const r = drag.card.getBoundingClientRect();
+  const ghost = drag.card.cloneNode(true);
+  ghost.classList.add('drag-ghost');
+  ghost.style.width = r.width + 'px';
+  ghost.style.left = r.left + 'px';
+  ghost.style.top = r.top + 'px';
+  document.body.appendChild(ghost);
+  drag.ghost = ghost;
+  drag.offX = x - r.left;
+  drag.offY = y - r.top;
+  drag.card.classList.add('drag-source');
+  document.body.classList.add('dragging');
+}
+
+function columnAt(x, y) {
+  if (drag && drag.ghost) drag.ghost.style.display = 'none';
+  const el = document.elementFromPoint(x, y);
+  if (drag && drag.ghost) drag.ghost.style.display = '';
+  return el ? el.closest('.stage-col') : null;
+}
+
+document.addEventListener('pointermove', (e) => {
+  if (!drag || e.pointerId !== drag.pointerId) return;
+  const moved = Math.hypot(e.clientX - drag.x, e.clientY - drag.y);
+  if (!drag.active) {
+    if (drag.touch) { if (moved > 8) { clearTimeout(drag.holdTimer); drag = null; } return; } // a swipe = scroll the page
+    if (moved < 6) return;
+    startDrag(drag.x, drag.y);
+  }
+  drag.ghost.style.left = (e.clientX - drag.offX) + 'px';
+  drag.ghost.style.top = (e.clientY - drag.offY) + 'px';
+  const col = columnAt(e.clientX, e.clientY);
+  document.querySelectorAll('.stage-col').forEach((c) => c.classList.toggle('drop-target', c === col));
+});
+
+// Stop the page from scrolling while a touch drag is happening
+document.addEventListener('touchmove', (e) => { if (drag && drag.active) e.preventDefault(); }, { passive: false });
+
+async function endDrag(e, cancelled) {
+  if (!drag || e.pointerId !== drag.pointerId) return;
+  const d = drag;
+  drag = null;
+  clearTimeout(d.holdTimer);
+  if (!d.active) {
+    if (!cancelled) openModal(d.id); // a plain click/tap opens the lead
+    return;
+  }
+  const col = cancelled ? null : columnAt(e.clientX, e.clientY);
+  d.ghost.remove();
+  d.card.classList.remove('drag-source');
+  document.body.classList.remove('dragging');
+  document.querySelectorAll('.stage-col').forEach((c) => c.classList.remove('drop-target'));
+  const lead = LEADS.find((l) => l.id === d.id);
+  const newStage = col && col.dataset.stage;
+  if (!lead || !newStage || newStage === lead.stage) return;
+
+  const oldStage = lead.stage;
+  lead.stage = newStage; // move it on screen right away
+  renderPipeline();
+  try {
+    const res = await fetch(`/api/leads/${d.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: newStage }),
+    });
+    if (!res.ok) throw new Error('save failed');
+    await refreshLeads();
+  } catch (err) {
+    lead.stage = oldStage;
+    alertBar(`Couldn't move ${lead.restaurantName}. Check your connection and try again.`);
+  }
+  renderCurrentTab();
+}
+document.addEventListener('pointerup', (e) => endDrag(e, false));
+document.addEventListener('pointercancel', (e) => endDrag(e, true));
+
+function alertBar(msg) {
+  let bar = document.getElementById('drag-error');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'drag-error';
+    bar.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 bg-ink text-bg text-sm px-4 py-2 rounded-full z-50';
+    document.body.appendChild(bar);
+  }
+  bar.textContent = msg;
+  bar.hidden = false;
+  setTimeout(() => { bar.hidden = true; }, 4000);
 }
 
 function renderRestaurants() {
@@ -206,6 +290,7 @@ function openModal(id) {
     document.getElementById('f-stage').value = lead.stage;
     document.getElementById('f-currentOffer').value = lead.currentOffer || '';
     document.getElementById('f-googleReviewLink').value = lead.googleReviewLink || '';
+    ['3', '5', '10', 'streak4'].forEach((k) => { document.getElementById(`f-prize${k}`).value = lead[`prize${k}`] || ''; });
     document.getElementById('f-notes').value = lead.notes || '';
     document.getElementById('f-staffPin').value = lead.staffPin || '';
     document.getElementById('redeem-link-display').textContent = `${window.location.origin}/redeem/${lead.id}`;
@@ -299,6 +384,10 @@ async function saveLead() {
     stage: document.getElementById('f-stage').value,
     currentOffer: document.getElementById('f-currentOffer').value,
     googleReviewLink: document.getElementById('f-googleReviewLink').value,
+    prize3: document.getElementById('f-prize3').value.trim(),
+    prize5: document.getElementById('f-prize5').value.trim(),
+    prize10: document.getElementById('f-prize10').value.trim(),
+    prizestreak4: document.getElementById('f-prizestreak4').value.trim(),
     notes: document.getElementById('f-notes').value,
   };
   const pin = document.getElementById('f-staffPin').value.trim();
