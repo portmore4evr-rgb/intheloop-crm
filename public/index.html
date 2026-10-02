@@ -194,6 +194,16 @@
           <label class="block text-xs font-mono uppercase tracking-wider text-inkmute mt-3 mb-1">Staff PIN (4 digits)</label>
           <input id="f-staffPin" type="text" inputmode="numeric" maxlength="4" pattern="\d{4}" class="w-full bg-bg border border-hair rounded-full px-4 py-2 text-sm font-code focus:outline-none focus:border-teal">
       </div>
+      <div>
+        <label class="font-mono text-xs uppercase tracking-wider text-inkmute mb-1 block">Bonus prizes (streaks &amp; badges)</label>
+        <p class="text-xs text-inkmute mb-2">Guests win these on their 3rd, 5th and 10th visit, and for coming in 4 weeks in a row. Leave blank to use the example shown.</p>
+        <div class="grid grid-cols-2 gap-2">
+          <input id="f-prize3" type="text" placeholder="3rd visit: Free dessert" aria-label="3rd visit prize" class="w-full bg-bg border border-hair rounded-full px-4 py-2 text-sm focus:outline-none focus:border-teal">
+          <input id="f-prize5" type="text" placeholder="5th visit: Free appetizer" aria-label="5th visit prize" class="w-full bg-bg border border-hair rounded-full px-4 py-2 text-sm focus:outline-none focus:border-teal">
+          <input id="f-prize10" type="text" placeholder="10th visit: Free entrée" aria-label="10th visit prize" class="w-full bg-bg border border-hair rounded-full px-4 py-2 text-sm focus:outline-none focus:border-teal">
+          <input id="f-prizestreak4" type="text" placeholder="4-week streak: Free drink" aria-label="4-week streak prize" class="w-full bg-bg border border-hair rounded-full px-4 py-2 text-sm focus:outline-none focus:border-teal">
+        </div>
+      </div>
       <p id="live-since-display" class="hidden font-mono text-xs text-teal">● Live client since —</p>
       <div>
         <label class="font-mono text-xs uppercase tracking-wider text-inkmute mb-1 block">Notes</label>

@@ -45,6 +45,12 @@
   .live-dot { width: 10px; height: 10px; border-radius: 9999px; background: #f9f4ed; animation: pulse 1s infinite; }
   .bg-scan-new { background-color: #2f5d8a; }
   .bg-scan-used { background-color: #645c50; }
+  .bg-scan-bonus { background-color: #b2622d; background-image: radial-gradient(circle at 20% 10%, rgba(242,193,78,.45), transparent 55%); }
+  .hex { clip-path: polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%); }
+  .wk-dot { width: 40px; height: 40px; border-radius: 9999px; display: flex; align-items: center; justify-content: center; }
+  @keyframes rise { from { transform: translateY(24px) scale(.9); opacity: 0; } to { transform: none; opacity: 1; } }
+  .rise { animation: rise .45s cubic-bezier(.2,.9,.3,1.2); }
+  @media (prefers-reduced-motion: reduce) { .rise, .pop-in, .live-dot { animation: none; } }
 </style>
 </head>
 <body class="font-body text-ink antialiased min-h-screen flex flex-col items-center">
@@ -106,6 +112,28 @@
       <h2 id="pass-offer-text" class="font-display text-2xl bg-paper2/15 rounded-2xl px-4 py-3">—</h2>
     </div>
 
+    <!-- STREAK + BADGES -->
+    <div id="progress-card" class="bg-ink text-paper2 rounded-[32px] p-6 mt-5">
+      <div class="flex items-end justify-between gap-4">
+        <div>
+          <p class="font-mono text-[11px] uppercase tracking-widest text-[#a8b48c] mb-1">Your streak</p>
+          <p class="flex items-baseline gap-2"><span id="streak-num" class="font-display text-6xl leading-none">0</span><span class="font-display text-xl">week streak</span></p>
+        </div>
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="#e0894d" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+      </div>
+      <div id="streak-weeks" class="grid grid-cols-6 gap-1 mt-5 text-center"></div>
+      <p id="streak-msg" class="text-sm text-[#d8ccb8] mt-4 text-center"></p>
+
+      <div id="next-prize" class="bg-paper2/10 rounded-2xl p-4 mt-5">
+        <p class="text-sm"><span id="next-remaining" class="font-semibold"></span></p>
+        <p id="next-prize-name" class="font-display text-2xl text-[#f2c14e] mt-0.5"></p>
+        <div class="h-2.5 rounded-full bg-paper2/15 mt-3 overflow-hidden"><div id="next-bar" class="h-full rounded-full bg-[#8fa36a]" style="width:0%"></div></div>
+      </div>
+
+      <p class="font-mono text-[11px] uppercase tracking-widest text-[#a8b48c] mt-6 mb-3">Badges</p>
+      <div id="badge-grid" class="grid grid-cols-3 gap-3 text-center"></div>
+    </div>
+
     <div class="ticket bg-paper2 border border-line rounded-[32px] p-6 mt-5 text-center">
       <p id="visit-number" class="font-mono text-[11px] uppercase tracking-widest text-inksoft mb-1"></p>
       <p class="text-inksoft text-xs">Member ID <span id="reward-id" class="font-code font-semibold text-ink">—</span></p>
@@ -158,8 +186,29 @@
   </div>
 
   <p class="text-center font-mono text-[10px] text-inksoft mt-8">Powered by InTheLoop</p>
+
+  <!-- NEW BADGE CELEBRATION -->
+  <div id="badge-modal" class="hidden fixed inset-0 z-50 bg-ink/80 flex items-end sm:items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="badge-title">
+    <div class="rise bg-ink text-paper2 rounded-[32px] w-full max-w-sm p-8 text-center border border-paper2/10">
+      <div id="badge-hex-outer" class="hex mx-auto w-36 h-40 flex items-center justify-center" style="background:#f2c14e">
+        <div id="badge-hex-inner" class="hex w-28 h-32 flex items-center justify-center" style="background:#c67139">
+          <svg id="badge-icon" width="52" height="52" viewBox="0 0 24 24" fill="#f9f4ed" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+        </div>
+      </div>
+      <p class="font-semibold mt-6">New badge</p>
+      <h2 id="badge-title" class="font-display text-4xl mt-1">3 visits</h2>
+      <p id="badge-body" class="text-[#d8ccb8] mt-3"></p>
+      <div id="badge-prize" class="hidden bg-[#f2c14e] text-ink rounded-2xl px-4 py-3 mt-5">
+        <p class="font-mono text-[11px] uppercase tracking-widest">You won</p>
+        <p id="badge-prize-name" class="font-display text-2xl"></p>
+        <p class="text-xs mt-1">Show your server the orange screen</p>
+      </div>
+      <button id="badge-close" class="w-full bg-amber text-paper2 font-display text-lg py-3.5 rounded-full mt-6 hover:bg-amberdark transition">See my progress</button>
+    </div>
+  </div>
 </div>
 
+<script src="/js/confetti.js"></script>
 <script src="/js/checkin.js"></script>
 </body>
 </html>
