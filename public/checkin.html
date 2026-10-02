@@ -12,8 +12,9 @@
     theme: {
       extend: {
         colors: {
-          paper: '#f5ead8', paper2: '#f9f4ed', ink: '#201e1d', inksoft: '#645c50',
-          amber: '#c67139', amberdark: '#b2622d', amberdeep: '#8c491a', brick: '#8c491a', line: '#dcd3c4', okgreen: '#56633f',
+          paper: '#f5ead8', paper2: '#fbf6ee', ink: '#201e1d', inksoft: '#5f574b',
+          greendeep: '#2f3a22', greenmid: '#8fa36a', gold: '#f2c14e', orangebright: '#e0894d',
+          amber: '#c67139', amberdark: '#b2622d', amberdeep: '#8c491a', brick: '#8c491a', line: '#ddd2bf', okgreen: '#56633f',
         },
         fontFamily: {
           display: ['Caprasimo', 'serif'],
@@ -27,13 +28,13 @@
 </script>
 <style>
   body { background-color:#f5ead8; }
-  .ticket { position: relative; }
-  .ticket::before, .ticket::after {
-    content: ""; position: absolute; top: 50%; transform: translateY(-50%);
-    width: 26px; height: 26px; border-radius: 9999px; background: #f5ead8; z-index: 2;
-  }
-  .ticket::before { left: -13px; }
-  .ticket::after { right: -13px; }
+  /* Same look as the landing page: deep green header band, orange offer card, paper cards */
+  .ticket { position: relative; box-shadow: 0 10px 26px rgba(47,58,34,.10); }
+  .guest-hero { width: 100%; background: #2f3a22; color: #f5ead8; position: relative; overflow: hidden; isolation: isolate; }
+  .guest-hero::before { content: ""; position: absolute; width: 340px; height: 340px; border-radius: 50%; background: #56633f; right: -120px; top: -140px; opacity: .6; z-index: -1; }
+  .guest-hero::after { content: ""; position: absolute; width: 180px; height: 180px; border-radius: 50%; background: #c67139; left: -80px; bottom: -110px; opacity: .45; z-index: -1; }
+  #scan-card { box-shadow: 0 18px 38px rgba(32,30,29,.28); }
+  .offer-card { background: #c67139; color: #fff; border-radius: 32px; box-shadow: 0 16px 34px rgba(140,73,26,.25); }
   .ticket-perf { background-image: repeating-linear-gradient(90deg, #c0b6a5 0 8px, transparent 8px 15px); height: 2px; }
   :focus-visible { outline: 2px solid #c67139; outline-offset: 2px; }
   .font-mono.uppercase { font-weight: 600; }
@@ -55,19 +56,22 @@
 </head>
 <body class="font-body text-ink antialiased min-h-screen flex flex-col items-center">
 
-<div class="w-full max-w-md px-5 pt-8 pb-16">
-
-  <div class="text-center mb-8">
-    <p class="font-mono text-[11px] uppercase tracking-[0.25em] text-inksoft mb-1">You're In The Loop</p>
-    <h1 id="restaurant-name" class="font-display text-4xl">Loading…</h1>
+<header class="guest-hero">
+  <div class="max-w-md mx-auto px-5 pt-8 pb-20 text-center">
+    <p class="font-display text-lg mb-4">IN<span class="text-orangebright">THE</span>LOOP</p>
+    <p class="font-mono text-[11px] uppercase tracking-[0.25em] text-gold mb-1">You're in the loop at</p>
+    <h1 id="restaurant-name" class="font-display text-4xl leading-tight">Loading…</h1>
   </div>
+</header>
+
+<div class="w-full max-w-md px-5 pb-16 -mt-14 relative">
 
   <!-- STEP 1: OFFER + OPT-IN -->
   <div id="step-1" class="step active">
-    <div class="ticket bg-paper2 border border-line rounded-[32px] p-7 shadow-sm mb-6">
-      <p class="font-mono text-[11px] uppercase tracking-widest text-amberdeep mb-2">Welcome Bundle</p>
+    <div class="offer-card p-7 mb-6">
+      <p class="font-mono text-[11px] uppercase tracking-widest text-[#ffe3c9] mb-2">Your welcome reward</p>
       <h2 id="offer-text" class="font-display text-3xl leading-tight mb-3">—</h2>
-      <p class="text-inksoft text-sm">Scan once, and you're in — deals land straight to your phone.</p>
+      <p class="text-[#fff3e8] text-sm">Join once and it's yours on your next visit. Then build a streak and win bigger prizes.</p>
     </div>
 
     <div class="ticket bg-paper2 border border-line rounded-[32px] p-6">
@@ -185,7 +189,7 @@
     </div>
   </div>
 
-  <p class="text-center font-mono text-[10px] text-inksoft mt-8">Powered by InTheLoop</p>
+  <p class="text-center text-xs text-inksoft mt-8">Powered by <span class="font-display text-sm text-ink">IN<span class="text-amber">THE</span>LOOP</span></p>
 
   <!-- NEW BADGE CELEBRATION -->
   <div id="badge-modal" class="hidden fixed inset-0 z-50 bg-ink/80 flex items-end sm:items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="badge-title">

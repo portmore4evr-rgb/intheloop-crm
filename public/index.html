@@ -12,9 +12,10 @@
     theme: {
       extend: {
         colors: {
-          bg: '#f5ead8', panel: '#ebddc5', panel2: '#eee7db',
+          bg: '#f5ead8', panel: '#fbf6ee', panel2: '#f3ecdf', paper: '#fbf6ee',
+          greendeep: '#2f3a22', greenmid: '#8fa36a', gold: '#f2c14e', orangebright: '#e0894d',
           ink: '#201e1d', inkmute: '#645c50',
-          teal: '#56633f', tealdim: '#728157', tealight: '#f0fae1',
+          teal: '#56633f', tealdim: '#728157', tealight: '#e6edd5',
           amber: '#c67139', amberdark: '#b2622d', amberdeep: '#8c491a', brick: '#8c491a', hair: '#dcd3c4',
         },
         fontFamily: {
@@ -29,15 +30,21 @@
 </script>
 <style>
   body { background-color:#f5ead8; }
-  .dot-field { background-image: radial-gradient(rgba(32,30,29,0.05) 1px, transparent 1px); background-size: 18px 18px; }
-  .card { background:#ebddc5; border:1px solid transparent; border-radius: 32px; }
-  .tab-active { background:#201e1d; color:#f5ead8; }
-  .tab-inactive { color:#645c50; }
-  .tab-inactive:hover { background:#ebddc5; color:#201e1d; }
+  /* Same look as the landing page: deep green header, cream ground, paper cards, orange actions */
+  .dot-field { background: #f5ead8; }
+  .card { background:#fbf6ee; border:1px solid #ddd2bf; border-radius: 26px; }
+  .tab-active { background:#c67139; color:#ffffff; }
+  .tab-inactive { color:#e3dccb; }
+  .tab-inactive:hover { background:rgba(245,234,216,.12); color:#ffffff; }
+  .app-header { background:#2f3a22; color:#f5ead8; position: sticky; top: 0; z-index: 30; overflow: hidden; }
+  .app-header::after { content:""; position:absolute; right:-90px; top:-130px; width:300px; height:300px; border-radius:50%; background:#56633f; opacity:.6; z-index:-1; }
+  .page-title { font-family: 'Caprasimo', serif; font-size: 40px; line-height: 1.05; margin: 0 0 20px; }
+  .stage-head { border-radius: 999px; padding: 6px 12px; }
   ::selection { background: rgba(198,113,57,0.3); color:#201e1d; }
   :focus-visible { outline: 2px solid #c67139; outline-offset: 2px; }
   #modal-backdrop { background: rgba(46,43,37,0.5); }
-  #modal-backdrop .card { background:#f5ead8; box-shadow: 0 12px 32px rgba(46,43,37,0.22); }
+  #modal-backdrop { background: rgba(47,58,34,0.6); }
+  #modal-backdrop .card { background:#fbf6ee; box-shadow: 0 20px 44px rgba(47,58,34,0.3); }
   a { color:#8c491a; } a:hover { color:#b2622d; }
   .font-mono.uppercase { font-weight: 600; letter-spacing: 0.08em; }
   /* Pipeline: all 5 stages fit the page width, no sideways scrolling */
@@ -57,12 +64,12 @@
 </head>
 <body class="font-body text-ink antialiased dot-field">
 
-<header class="border-b border-hair bg-bg/90 backdrop-blur sticky top-0 z-30">
+<header class="app-header isolate">
   <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-    <span class="font-display text-2xl">IN<span class="text-teal">THE</span>LOOP <span class="text-inkmute font-body font-normal text-sm">· CRM</span></span>
-    <button id="btn-add-lead" class="bg-amber text-bg font-semibold text-sm px-4 py-2 rounded-full hover:bg-amberdark transition">+ Add Lead</button>
+    <span class="font-display text-2xl text-bg">IN<span class="text-orangebright">THE</span>LOOP <span class="text-[#c9c0ad] font-body font-normal text-sm">· CRM</span></span>
+    <button id="btn-add-lead" class="bg-amber text-white font-display text-base px-5 py-2.5 rounded-full hover:bg-amberdark transition">+ Add Lead</button>
   </div>
-  <nav class="max-w-6xl mx-auto px-6 flex gap-1 pb-2">
+  <nav class="max-w-6xl mx-auto px-6 flex flex-wrap gap-1 pb-3">
     <button data-tab="pipeline" class="tab-btn tab-active px-4 py-2 rounded-full text-sm font-medium">Pipeline</button>
     <button data-tab="restaurants" class="tab-btn tab-inactive px-4 py-2 rounded-full text-sm font-medium">Restaurants</button>
     <button data-tab="analytics" class="tab-btn tab-inactive px-4 py-2 rounded-full text-sm font-medium">Analytics</button>
@@ -73,13 +80,15 @@
 
   <!-- PIPELINE VIEW -->
   <section id="view-pipeline">
-    <p class="font-mono text-xs uppercase tracking-wider text-inkmute mb-4">Lead Pipeline</p>
+    <p class="font-mono text-xs uppercase tracking-wider text-amberdeep mb-1">Lead pipeline</p>
+    <h1 class="page-title">Drag leads toward <span class="text-amber">Live Client.</span></h1>
     <div id="pipeline-board" class="pipeline-grid"></div>
   </section>
 
   <!-- RESTAURANTS VIEW -->
   <section id="view-restaurants" class="hidden">
-    <p class="font-mono text-xs uppercase tracking-wider text-inkmute mb-4">Restaurant Profiles</p>
+    <p class="font-mono text-xs uppercase tracking-wider text-amberdeep mb-1">Restaurant profiles</p>
+    <h1 class="page-title">Every restaurant, <span class="text-teal">one list.</span></h1>
     <div class="card overflow-hidden">
       <table class="w-full text-sm">
         <thead>
@@ -99,7 +108,8 @@
 
   <!-- ANALYTICS VIEW -->
   <section id="view-analytics" class="hidden">
-    <p class="font-mono text-xs uppercase tracking-wider text-inkmute mb-4">Analytics</p>
+    <p class="font-mono text-xs uppercase tracking-wider text-amberdeep mb-1">Analytics</p>
+    <h1 class="page-title">How the loop is <span class="text-amber">growing.</span></h1>
     <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-5">
       <div class="card p-5">
         <p class="font-mono text-xs uppercase tracking-wider text-inkmute mb-2">Total Leads</p>
