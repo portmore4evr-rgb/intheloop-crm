@@ -150,27 +150,117 @@ function passStatus(customer) {
 //   N-0143 = NEW member who joined today (reward starts next visit)
 //   X-0143 = reward already used today
 // The number counts up with every visit at the restaurant. Re-scanning the same day shows the same code.
-const SCAN_LETTERS = { reward: 'R', new: 'N', used: 'X' };
+const SCAN_LETTERS = { reward: 'R', new: 'N', used: 'X', bonus: 'B' };
+
+// ---- Streaks, badges and bigger prizes ----
+// A streak = weeks in a row (Mon-Sun) with at least one visit. Visit milestones and a 4-week
+// streak unlock bonus prizes the owner sets in the CRM (sensible defaults until they do).
+const VISIT_MILESTONES = [3, 5, 10];
+const STREAK_BADGES = [2, 4, 8];
+const STREAK_PRIZE_WEEKS = 4;
+const DEFAULT_PRIZES = { 3: 'Free dessert', 5: 'Free appetizer', 10: 'Free entrée', streak4: 'Free drink' };
+function prizeFor(restaurant, key) {
+  const v = restaurant[`prize${key}`];
+  return (v && String(v).trim()) || DEFAULT_PRIZES[key];
+}
+function weekStart(day) { // 'YYYY-MM-DD' -> that week's Monday
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+function weeksBefore(wk, n) {
+  const d = new Date(`${wk}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 7 * n);
+  return d.toISOString().slice(0, 10);
+}
+function streakFor(db, customer) {
+  const weeks = new Set(db.visits.filter((v) => v.customerId === customer.id).map((v) => weekStart(v.day)));
+  const thisWeek = weekStart(localDay(new Date()));
+  const visitedThisWeek = weeks.has(thisWeek);
+  let wk = visitedThisWeek ? thisWeek : weeksBefore(thisWeek, 1);
+  let count = 0;
+  while (weeks.has(wk)) { count += 1; wk = weeksBefore(wk, 1); }
+  const lastWeeks = [5, 4, 3, 2, 1, 0].map((i) => {
+    const w = weeksBefore(thisWeek, i);
+    const label = i === 0 ? 'This wk' : new Date(`${w}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    return { label, visited: weeks.has(w), current: i === 0 };
+  });
+  return { weeks: count, visitedThisWeek, atRisk: count > 0 && !visitedThisWeek, thisWeek, lastWeeks };
+}
+function progressFor(db, restaurant, customer) {
+  const visits = customer.checkinCount || 1;
+  const streak = streakFor(db, customer);
+  const best = Math.max(customer.bestStreak || 0, streak.weeks);
+  const badges = [
+    ...VISIT_MILESTONES.map((n) => ({ id: `v${n}`, kind: 'visits', n, label: `${n} visits`, prize: prizeFor(restaurant, n), earned: visits >= n })),
+    ...STREAK_BADGES.map((n) => ({ id: `s${n}`, kind: 'streak', n, label: `${n}-week streak`,
+      prize: n === STREAK_PRIZE_WEEKS ? prizeFor(restaurant, 'streak4') : '', earned: best >= n })),
+  ];
+  const nextVisit = VISIT_MILESTONES.find((n) => visits < n);
+  return {
+    visits,
+    streak: streak.weeks,
+    bestStreak: best,
+    visitedThisWeek: streak.visitedThisWeek,
+    atRisk: streak.atRisk,
+    lastWeeks: streak.lastWeeks,
+    badges,
+    next: nextVisit ? { n: nextVisit, remaining: nextVisit - visits, prize: prizeFor(restaurant, nextVisit) } : null,
+  };
+}
+
 function processScan(db, restaurant, customer, visit) {
   if (!visit.code) {
     const today = localDay(new Date());
     let status = 'reward';
     if (localDay(customer.optedInAt) === today) status = 'new';
     else if (customer.lastRedemptionAt && localDay(customer.lastRedemptionAt) === today) status = 'used';
+
+    // New badges earned on this visit (streak badges can't be earned on join day: one week only)
+    customer.awarded = customer.awarded || [];
+    const visits = customer.checkinCount || 1;
+    const streak = streakFor(db, customer).weeks;
+    customer.bestStreak = Math.max(customer.bestStreak || 0, streak);
+    const newBadges = [];
+    const prizes = [];
+    VISIT_MILESTONES.forEach((n) => {
+      if (visits >= n && !customer.awarded.includes(`v${n}`)) {
+        customer.awarded.push(`v${n}`);
+        const prize = prizeFor(restaurant, n);
+        newBadges.push({ id: `v${n}`, kind: 'visits', label: `${n} visits`, prize });
+        if (visits === n) prizes.push(prize);
+      }
+    });
+    STREAK_BADGES.forEach((n) => {
+      if (customer.bestStreak >= n && !customer.awarded.includes(`s${n}`)) {
+        customer.awarded.push(`s${n}`);
+        const prize = n === STREAK_PRIZE_WEEKS ? prizeFor(restaurant, 'streak4') : '';
+        newBadges.push({ id: `s${n}`, kind: 'streak', label: `${n}-week streak`, prize });
+        if (prize) prizes.push(prize);
+      }
+    });
+    if (status === 'reward' && prizes.length) status = 'bonus';
+
     restaurant.visitCounter = (restaurant.visitCounter || 0) + 1;
     visit.code = `${SCAN_LETTERS[status]}-${String(restaurant.visitCounter).padStart(4, '0')}`;
     visit.scanStatus = status;
-    if (status === 'reward') {
+    visit.newBadges = newBadges;
+    if (status === 'bonus') visit.prize = prizes.join(' + ');
+    if (status === 'reward' || status === 'bonus') {
       const now = new Date().toISOString();
       customer.redemptionCount = (customer.redemptionCount || 0) + 1;
       customer.lastRedemptionAt = now;
       db.redemptions.unshift({
         id: crypto.randomUUID(), restaurantId: restaurant.id, rewardIdEntered: customer.rewardId,
         result: 'valid', via: 'scan', visitCode: visit.code, customerId: customer.id, at: now,
+        ...(visit.prize ? { bonusPrize: visit.prize } : {}),
       });
     }
+    visit.firstShown = true;
+    return { code: visit.code, status: visit.scanStatus, at: visit.at, day: visit.day, prize: visit.prize || '', newBadges };
   }
-  return { code: visit.code, status: visit.scanStatus, at: visit.at, day: visit.day };
+  // Same-day rescan: same code, no new celebration
+  return { code: visit.code, status: visit.scanStatus, at: visit.at, day: visit.day, prize: visit.prize || '', newBadges: [] };
 }
 
 function maskPhone(p) { const d = String(p || '').replace(/\D/g, ''); return d.length >= 4 ? '•••-•••-' + d.slice(-4) : ''; }
@@ -183,7 +273,7 @@ app.use(express.json());
 
 // ---- Optional admin password for the CRM itself ----
 // Set ADMIN_PASSWORD in Railway Variables. Guest (check-in) and staff (redeem) pages stay open.
-const PUBLIC_PREFIXES = ['/unsubscribe/', '/welcome', '/media/', '/js/welcome.js', '/checkin/', '/redeem/', '/api/public/', '/api/sms/inbound', '/js/checkin.js', '/js/redeem.js', '/favicon'];
+const PUBLIC_PREFIXES = ['/unsubscribe/', '/welcome', '/media/', '/js/welcome.js', '/js/confetti.js', '/checkin/', '/redeem/', '/api/public/', '/api/sms/inbound', '/js/checkin.js', '/js/redeem.js', '/favicon'];
 app.use((req, res, next) => {
   const pass = process.env.ADMIN_PASSWORD;
   if (!pass || PUBLIC_PREFIXES.some((p) => req.path.startsWith(p))) return next();
@@ -262,6 +352,10 @@ app.post('/api/leads', (req, res) => {
     slowestNight: req.body.slowestNight || '',
     currentOffer: req.body.currentOffer || '',
     googleReviewLink: req.body.googleReviewLink || '',
+    prize3: req.body.prize3 || '',
+    prize5: req.body.prize5 || '',
+    prize10: req.body.prize10 || '',
+    prizestreak4: req.body.prizestreak4 || '',
     stage,
     liveSince: stage === 'Live Client' ? now : null,
     notes: req.body.notes || '',
@@ -518,6 +612,7 @@ app.post('/api/public/checkin', async (req, res) => {
     status: passStatus(customer),
     isNewCustomer,
     scan,
+    progress: progressFor(db, restaurant, customer),
     offer: restaurant.currentOffer,
     restaurantName: restaurant.restaurantName,
   });
@@ -547,6 +642,7 @@ app.post('/api/public/returning', (req, res) => {
     return res.json({
       member: true,
       scan,
+      progress: progressFor(db, restaurant, here),
       customer: publicCustomer(here),
       status: passStatus(here),
       visitType: here.lastVisitType || '',
@@ -931,6 +1027,7 @@ function buildOwnerReport(db, lead, which) {
   const checkins = db.visits.filter((v) => v.restaurantId === lead.id && r.inRange(v.at)).length;
   const valid = db.redemptions.filter((x) => x.restaurantId === lead.id && x.result === 'valid' && r.inRange(x.at));
   const returnVisits = valid.length;
+  const bonusPrizes = valid.filter((x) => x.bonusPrize).length;
   const returningGuests = new Set(valid.map((x) => x.customerId)).size;
   const avgCheck = Number(lead.avgCheck) > 0 ? Number(lead.avgCheck) : DEFAULT_AVG_CHECK;
   const estRevenue = returnVisits * avgCheck;
@@ -944,7 +1041,7 @@ function buildOwnerReport(db, lead, which) {
   const messagesSent = db.messages.filter((m) => m.restaurantId === lead.id && m.customerId && r.inRange(m.sentAt)).length;
   const reviewAsks = db.messages.filter((m) => m.restaurantId === lead.id && (m.type === 'review_request' || m.includesReview) && r.inRange(m.sentAt)).length;
   const stats = { month: r.label, totalMembers: customers.length, newSignups, checkins, returnVisits, returningGuests,
-                  avgCheck, estRevenue, messagesSent, reviewAsks, topReasons, firstTimeGuests, regularVisits };
+                  avgCheck, estRevenue, messagesSent, reviewAsks, topReasons, firstTimeGuests, regularVisits, bonusPrizes };
 
   const row = (label, value) => `<tr><td style="padding:8px 0;color:#645c50">${label}</td><td style="padding:8px 0;text-align:right;font-weight:bold">${value}</td></tr>`;
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;color:#201e1d">
@@ -964,6 +1061,7 @@ function buildOwnerReport(db, lead, which) {
       ${row('Visits from regulars', regularVisits)}
       ${row('Tracked return visits (rewards redeemed)', returnVisits)}
       ${row('Different guests who came back', returningGuests)}
+      ${row('Bonus prizes won (streaks and milestones)', bonusPrizes)}
       ${row('Messages sent to your guests', messagesSent)}
       ${row('Google review requests sent', reviewAsks)}
     </table>
@@ -1006,6 +1104,35 @@ app.post('/api/leads/:id/report/send', async (req, res) => {
   writeDB(db);
   res.json({ status, to: lead.email, stats: report.stats, simulated: EMAIL_SIMULATION });
 });
+
+// ---- Streak reminders ----
+// Thursdays after 11am: guests on a 2+ week streak who haven't been in this week get one nudge.
+async function runStreakReminders() {
+  const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: TIMEZONE }));
+  if (nowLocal.getDay() !== 4 || nowLocal.getHours() < 11) return;
+  const db = readDB();
+  let sent = 0;
+  for (const customer of db.customers) {
+    if (!canMessage(customer)) continue;
+    const s = streakFor(db, customer);
+    if (!s.atRisk || s.weeks < 2 || customer.streakReminderWeek === s.thisWeek) continue;
+    const restaurant = db.leads.find((l) => l.id === customer.restaurantId);
+    if (!restaurant) continue;
+    const next = s.weeks + 1;
+    const unlock = next === STREAK_PRIZE_WEEKS ? ` Week ${next} unlocks: ${prizeFor(restaurant, 'streak4')}!` : '';
+    await notifyGuest(db, restaurant, customer, 'streak_reminder', {
+      preferEmail: true,
+      sms: `Your ${s.weeks}-week streak at ${restaurant.restaurantName} ends Sunday. Stop in this week to keep it alive.${unlock} Reply STOP to opt out.`,
+      subject: `Keep your ${s.weeks}-week streak alive at ${restaurant.restaurantName}`,
+      html: `<p style="font-size:40px;font-weight:bold;margin:0">${s.weeks}</p><p style="margin:0 0 12px">week streak</p>
+        <p>You've been in ${s.weeks} weeks in a row. Stop by before Sunday to keep your streak alive.${unlock ? `<br><b>${escHtml(unlock.trim())}</b>` : ''}</p>
+        <p>Just scan the QR code or tap the tag at your table when you come in.</p>`,
+    });
+    customer.streakReminderWeek = s.thisWeek;
+    sent += 1;
+  }
+  if (sent) writeDB(db);
+}
 
 async function runMonthlyReports() {
   const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: TIMEZONE }));
@@ -1058,7 +1185,7 @@ async function runDailyBackup(force) {
 }
 
 async function runScheduledJobs() {
-  for (const job of [runFollowUpCheck, runFirstVisitEmailCheck, runReviewRequestCheck, runAutomationCheck, runMonthlyReports, runDailyBackup]) {
+  for (const job of [runFollowUpCheck, runFirstVisitEmailCheck, runStreakReminders, runReviewRequestCheck, runAutomationCheck, runMonthlyReports, runDailyBackup]) {
     try { await job(); } catch (err) { console.error(`Scheduled job ${job.name} failed:`, err.message); }
   }
 }
