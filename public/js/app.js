@@ -293,6 +293,7 @@ function openModal(id) {
     document.getElementById('f-stage').value = lead.stage;
     document.getElementById('f-currentOffer').value = lead.currentOffer || '';
     document.getElementById('f-googleReviewLink').value = lead.googleReviewLink || '';
+    document.getElementById('f-smsEnabled').checked = !!lead.smsEnabled;
     PRIZE_KEYS.forEach((k) => { document.getElementById(`f-prize${k}`).value = lead[`prize${k}`] || ''; });
     document.getElementById('f-notes').value = lead.notes || '';
     document.getElementById('f-staffPin').value = lead.staffPin || '';
@@ -387,6 +388,7 @@ async function saveLead() {
     stage: document.getElementById('f-stage').value,
     currentOffer: document.getElementById('f-currentOffer').value,
     googleReviewLink: document.getElementById('f-googleReviewLink').value,
+    smsEnabled: document.getElementById('f-smsEnabled').checked,
     ...Object.fromEntries(PRIZE_KEYS.map((k) => [`prize${k}`, document.getElementById(`f-prize${k}`).value.trim()])),
     notes: document.getElementById('f-notes').value,
   };

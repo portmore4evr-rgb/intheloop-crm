@@ -24,8 +24,9 @@ function showStep(n) {
   document.getElementById('step-' + n).classList.add('active');
 }
 
+// Must match SMS_CONSENT_TEXT in server.js word for word (it's what gets stored as proof of consent).
 function consentText() {
-  return `Yes, text or email me my Reward ID and occasional offers from ${restaurantName}. Msg frequency varies. Msg & data rates may apply. Reply STOP or unsubscribe anytime.`;
+  return `Yes, text me rewards, reminders and offers from ${restaurantName}. Up to 4 msgs/month. Msg & data rates may apply. Reply STOP to cancel, HELP for help. Consent is not a condition of purchase.`;
 }
 
 const SCAN_LOOK = {
@@ -154,6 +155,11 @@ async function loadRestaurant() {
     document.getElementById('restaurant-name').textContent = data.restaurantName;
     document.getElementById('consent-text').textContent = consentText();
     document.getElementById('join-consent-text').textContent = consentText();
+    // The text checkbox only shows when this restaurant has the text add-on; email works either way.
+    if (data.smsEnabled) {
+      document.getElementById('consent-wrap').classList.remove('hidden');
+      document.getElementById('join-consent-wrap').classList.remove('hidden');
+    }
     document.getElementById('offer-text').textContent = data.currentOffer || 'Ask your server about today\'s deal!';
     currentOffer = data.currentOffer || '';
   } catch (e) {
@@ -199,7 +205,6 @@ async function checkIn() {
   const fail = (msg) => { errorEl.textContent = msg; errorEl.classList.remove('hidden'); };
   if (!visitType) return fail('Please pick whether this is your first time here.');
   if (!phone) return fail('Please enter your phone number.');
-  if (!smsConsent) return fail('Please tick the box so we can text you your Reward ID.');
 
   try {
     const res = await fetch('/api/public/checkin', {
@@ -224,7 +229,6 @@ async function joinWithSavedInfo() {
   errorEl.classList.add('hidden');
   const fail = (msg) => { errorEl.textContent = msg; errorEl.classList.remove('hidden'); };
   if (!visitType) return fail('Please pick whether this is your first time here.');
-  if (!smsConsent) return fail('Please tick the box so we can text you your Reward ID.');
   try {
     const res = await fetch('/api/public/checkin', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },

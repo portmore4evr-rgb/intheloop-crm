@@ -10,11 +10,11 @@ document.getElementById('yr').textContent = new Date().getFullYear();
 
 // A little celebration when the page opens, from the example phone
 window.addEventListener('load', () => {
-  const phone = document.querySelector('.phone');
+  const phone = document.querySelector('.hero-video');
   if (!phone || !window.celebrate) return;
   const r = phone.getBoundingClientRect();
   if (r.bottom < 0 || r.top > window.innerHeight) return;
-  setTimeout(() => window.celebrate({ count: 140, origin: { x: (r.left + r.width / 2) / window.innerWidth, y: Math.max(0.1, (r.top + 120) / window.innerHeight) } }), 500);
+  setTimeout(() => window.celebrate({ count: 140, origin: { x: (r.left + r.width / 2) / window.innerWidth, y: Math.max(0.1, (r.top + r.height / 2) / window.innerHeight) } }), 500);
 });
 
 // Show a friendly placeholder until the MP4 is uploaded to public/media/
@@ -28,6 +28,7 @@ window.addEventListener('load', () => {
   fetch(src.getAttribute('src'), { method: 'HEAD' }).then((r) => { if (!r.ok) missing(); }).catch(() => {});
 })();
 
+const formShownAt = Date.now(); // spam check: real people take more than a couple of seconds
 document.getElementById('book-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const err = document.getElementById('book-error');
@@ -37,6 +38,8 @@ document.getElementById('book-form').addEventListener('submit', async (e) => {
     phone: document.getElementById('b-phone').value.trim(),
     email: document.getElementById('b-email').value.trim(),
     preferredTime: document.getElementById('b-time').value,
+    website: (document.getElementById('b-website') || {}).value || '',
+    elapsedMs: Date.now() - formShownAt,
   };
   const fail = (m) => { err.textContent = m; err.classList.remove('hidden'); };
   if (!payload.restaurantName) return fail('Please add your restaurant name.');
