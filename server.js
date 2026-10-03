@@ -268,11 +268,52 @@ function writeDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-app.use(express.json());
+// ---- Force HTTPS (Railway terminates SSL and tells us the original protocol) ----
+app.use((req, res, next) => {
+  if (req.headers['x-forwarded-proto'] === 'http' && process.env.RAILWAY_PUBLIC_DOMAIN) {
+    return res.redirect(308, `https://${req.headers.host}${req.originalUrl || req.url}`);
+  }
+  if (req.headers['x-forwarded-proto'] === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+  next();
+});
+
+app.use(express.json({ limit: '50kb' }));
+
+// ---- Spam protection: simple per-IP rate limits for public forms (in memory, resets on redeploy) ----
+const hits = new Map();
+function clientIp(req) { return String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim(); }
+function rateLimit(name, max, windowMs) {
+  return (req, res, next) => {
+    const key = `${name}:${clientIp(req)}`;
+    const now = Date.now();
+    const list = (hits.get(key) || []).filter((t) => now - t < windowMs);
+    if (list.length >= max) {
+      res.set('Retry-After', String(Math.ceil(windowMs / 1000)));
+      return res.status(429).json({ error: 'Too many tries. Please wait a few minutes and try again.' });
+    }
+    list.push(now);
+    hits.set(key, list);
+    next();
+  };
+}
+setInterval(() => { const now = Date.now(); for (const [k, v] of hits) if (!v.some((t) => now - t < 3600000)) hits.delete(k); }, 600000).unref();
+
+// Pages that get the live site address (social previews) and the optional analytics snippet.
+// Analytics: set PLAUSIBLE_DOMAIN (e.g. intheloop.com) or CLOUDFLARE_ANALYTICS_TOKEN in Railway. Both are cookie-free.
+function analyticsSnippet() {
+  if (process.env.PLAUSIBLE_DOMAIN) return `<script defer data-domain="${escHtml(process.env.PLAUSIBLE_DOMAIN)}" src="https://plausible.io/js/script.js"></script>`;
+  if (process.env.CLOUDFLARE_ANALYTICS_TOKEN) return `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "${escHtml(process.env.CLOUDFLARE_ANALYTICS_TOKEN)}"}'></script>`;
+  return '';
+}
+function sendPage(res, file, { analytics = false } = {}) {
+  let html = fs.readFileSync(path.join(__dirname, 'public', file), 'utf8').split('__BASE_URL__').join(publicBaseUrl());
+  if (analytics) html = html.replace('</head>', `${analyticsSnippet()}\n</head>`);
+  res.type('html').send(html);
+}
 
 // ---- Optional admin password for the CRM itself ----
 // Set ADMIN_PASSWORD in Railway Variables. Guest (check-in) and staff (redeem) pages stay open.
-const PUBLIC_PREFIXES = ['/unsubscribe/', '/welcome', '/media/', '/js/welcome.js', '/js/confetti.js', '/checkin/', '/redeem/', '/api/public/', '/api/sms/inbound', '/js/checkin.js', '/js/redeem.js', '/favicon'];
+const PUBLIC_PREFIXES = ['/unsubscribe/', '/welcome', '/media/', '/js/welcome.js', '/js/confetti.js', '/checkin/', '/redeem/', '/api/public/', '/api/sms/inbound', '/js/checkin.js', '/js/redeem.js', '/favicon', '/apple-touch-icon.png', '/privacy', '/terms', '/robots.txt', '/sitemap.xml'];
 app.use((req, res, next) => {
   const pass = process.env.ADMIN_PASSWORD;
   if (!pass || PUBLIC_PREFIXES.some((p) => req.path.startsWith(p))) return next();
@@ -289,12 +330,34 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // The public check-in page a QR code / NFC tag points to: /checkin/<restaurantId>
 app.get('/checkin/:restaurantId', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'checkin.html'));
+  sendPage(res, 'checkin.html');
+});
+
+// Guest privacy policy + program terms (linked under the sign-up button and in every text registration)
+app.get(['/privacy', '/terms'], (req, res) => {
+  const contact = process.env.SUPPORT_CONTACT || process.env.ADMIN_EMAIL || 'reply to any message from us';
+  const html = fs.readFileSync(path.join(__dirname, 'public', 'privacy.html'), 'utf8')
+    .replace('{{CONTACT}}', escHtml(contact))
+    .replace('{{ADDRESS}}', escHtml(process.env.BUSINESS_ADDRESS || 'InTheLoop, Worcester, MA'));
+  res.type('html').send(html);
 });
 
 // Public landing page with the VSL + booking form: /welcome
 app.get('/welcome', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'welcome.html'));
+  sendPage(res, 'welcome.html', { analytics: true });
+});
+
+// Search engines: only the landing page and privacy page should be found.
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').send(`User-agent: *\nAllow: /welcome\nAllow: /privacy\nAllow: /media/\nDisallow: /\n\nSitemap: ${publicBaseUrl()}/sitemap.xml\n`);
+});
+app.get('/sitemap.xml', (req, res) => {
+  const base = publicBaseUrl();
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${base}/welcome</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>${base}/privacy</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+</urlset>`);
 });
 
 // Staff-only redeem page (protected by the restaurant's 4-digit staff PIN): /redeem/<restaurantId>
@@ -357,6 +420,7 @@ app.post('/api/leads', (req, res) => {
     prizestreak2: req.body.prizestreak2 || '',
     prizestreak4: req.body.prizestreak4 || '',
     prizestreak8: req.body.prizestreak8 || '',
+    smsEnabled: req.body.smsEnabled === true, // texting is a prepaid add-on; off until the owner buys it
     stage,
     liveSince: stage === 'Live Client' ? now : null,
     notes: req.body.notes || '',
@@ -381,6 +445,7 @@ app.put('/api/leads/:id', (req, res) => {
   const body = { ...req.body };
   delete body.rewardCode; // reward IDs already issued depend on these – never overwritten from the form
   delete body.rewardCounter;
+  if (body.smsEnabled !== undefined) body.smsEnabled = body.smsEnabled === true;
   if (body.staffPin !== undefined && !/^\d{4}$/.test(String(body.staffPin))) delete body.staffPin;
   const updated = {
     ...existing,
@@ -468,9 +533,23 @@ function escHtml(str) {
   return String(str || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function canText(c) { return !SIMULATION_MODE && !c.optedOut && c.smsConsent !== false && !!c.phone; }
-function canEmail(c) { return !!c.email && !c.emailOptOut && c.smsConsent !== false; }
-function canMessage(c) { return (!c.optedOut && c.smsConsent !== false) || canEmail(c); }
+// Texts need: the restaurant's prepaid text add-on, the guest's own checkbox consent, and no STOP.
+function smsAllowed(c, restaurant) { return !!(restaurant && restaurant.smsEnabled) && c.smsConsent === true && !c.optedOut && !!c.phone; }
+function canText(c, restaurant) { return !SIMULATION_MODE && smsAllowed(c, restaurant); }
+// Email is separate from text consent: guests can decline texts and still get email (unsubscribe link in every one).
+function canEmail(c) { return !!c.email && !c.emailOptOut; }
+// Callers without the restaurant handy only check the guest's side; notifyGuest re-checks the restaurant's text add-on.
+function canMessage(c, restaurant) { return (restaurant ? smsAllowed(c, restaurant) : (c.smsConsent === true && !c.optedOut && !!c.phone)) || canEmail(c); }
+
+const SMS_CONSENT_TEXT = (name) => `Yes, text me rewards, reminders and offers from ${name}. Up to 4 msgs/month. Msg & data rates may apply. Reply STOP to cancel, HELP for help. Consent is not a condition of purchase.`;
+function recordSmsConsent(customer, restaurant, req) {
+  customer.smsConsent = true;
+  customer.optedOut = false;
+  customer.smsConsentAt = new Date().toISOString();
+  customer.smsConsentText = SMS_CONSENT_TEXT(restaurant.restaurantName);
+  customer.smsConsentSource = 'checkin_page_checkbox';
+  customer.smsConsentIp = String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim();
+}
 
 // Guest-facing email wrapper with the legally required unsubscribe link + mailing address (CAN-SPAM).
 function guestEmailHtml(restaurant, customer, bodyHtml) {
@@ -502,7 +581,7 @@ async function notifyGuest(db, restaurant, customer, type, { sms, subject, html,
       to: customer.email, subject, fromName: restaurant.restaurantName,
       html: guestEmailHtml(restaurant, customer, html),
     });
-  } else if (canText(customer)) {
+  } else if (canText(customer, restaurant)) {
     channel = 'sms';
     result = await sendSms(customer.phone, sms);
   } else if (canEmail(customer)) {
@@ -511,7 +590,7 @@ async function notifyGuest(db, restaurant, customer, type, { sms, subject, html,
       to: customer.email, subject, fromName: restaurant.restaurantName,
       html: guestEmailHtml(restaurant, customer, html),
     });
-  } else if (!customer.optedOut && customer.smsConsent !== false) {
+  } else if (smsAllowed(customer, restaurant)) {
     channel = 'sms';
     result = await sendSms(customer.phone, sms); // simulation mode: logged only
   }
@@ -533,10 +612,11 @@ app.get('/api/public/restaurant/:id', (req, res) => {
     restaurantName: restaurant.restaurantName,
     currentOffer: restaurant.currentOffer,
     slowestNight: restaurant.slowestNight,
+    smsEnabled: !!restaurant.smsEnabled,
   });
 });
 
-app.post('/api/public/checkin', async (req, res) => {
+app.post('/api/public/checkin', rateLimit('checkin', 40, 10 * 60 * 1000), async (req, res) => {
   const db = readDB();
   const { restaurantId } = req.body;
   const restaurant = db.leads.find((l) => l.id === restaurantId);
@@ -554,7 +634,8 @@ app.post('/api/public/checkin', async (req, res) => {
   }
   if (!phone) return res.status(400).json({ error: 'Please enter a valid mobile number' });
   if (req.body.email && !normalizeEmail(req.body.email)) return res.status(400).json({ error: 'Please enter a valid email' });
-  if (req.body.smsConsent !== true) return res.status(400).json({ error: 'Please tick the box to agree to texts' });
+  // Text consent is optional and separate (carrier + TCPA rules); only counts if this restaurant offers texts.
+  const wantsTexts = req.body.smsConsent === true && !!restaurant.smsEnabled;
 
   // Same phone OR same email at this restaurant = same guest: no new ID, no double reward.
   let customer = db.customers.find(
@@ -565,7 +646,7 @@ app.post('/api/public/checkin', async (req, res) => {
   if (customer) {
     customer.name = name || customer.name;
     if (email && !customer.email) customer.email = email;
-    if (customer.optedOut) { customer.optedOut = false; customer.smsConsent = true; customer.consentAt = now; }
+    if (wantsTexts) recordSmsConsent(customer, restaurant, req);
   } else {
     customer = {
       id: crypto.randomUUID(),
@@ -574,7 +655,7 @@ app.post('/api/public/checkin', async (req, res) => {
       name: name || '',
       phone,
       email,
-      smsConsent: true,
+      smsConsent: false,
       emailConsent: !!email,
       consentAt: now,
       optedInAt: now,
@@ -587,6 +668,7 @@ app.post('/api/public/checkin', async (req, res) => {
       reviewRequestSentAt: null,
       firstVisitEmailSentAt: null,
     };
+    if (wantsTexts) recordSmsConsent(customer, restaurant, req);
     db.customers.unshift(customer);
   }
   ensureDeviceToken(customer);
@@ -620,7 +702,7 @@ app.post('/api/public/checkin', async (req, res) => {
 });
 
 // Returning guest: the check-in page sends the token saved on their phone, no form needed.
-app.post('/api/public/returning', (req, res) => {
+app.post('/api/public/returning', rateLimit('returning', 60, 10 * 60 * 1000), (req, res) => {
   const db = readDB();
   const { restaurantId } = req.body;
   const token = String(req.body.token || '');
@@ -657,7 +739,10 @@ app.post('/api/public/returning', (req, res) => {
 });
 
 // Landing-page booking form -> becomes a New Lead in the CRM pipeline
-app.post('/api/public/book', (req, res) => {
+app.post('/api/public/book', rateLimit('book', 5, 60 * 60 * 1000), (req, res) => {
+  // Bots fill the hidden "website" field or submit instantly; pretend it worked so they don't retry.
+  const tooFast = Number(req.body.elapsedMs) > 0 && Number(req.body.elapsedMs) < 2500;
+  if (req.body.website || tooFast) return res.status(201).json({ ok: true });
   const db = readDB();
   const restaurantName = String(req.body.restaurantName || '').trim().slice(0, 120);
   const phone = String(req.body.phone || '').trim().slice(0, 40);
@@ -698,7 +783,7 @@ app.post('/api/public/book', (req, res) => {
 // Staff redeem: requires the restaurant's staff PIN + the guest's Reward ID.
 // A redemption counts as a RETURN visit, so it isn't allowed on the day they signed up,
 // and only once per guest per day.
-app.post('/api/public/redeem', (req, res) => {
+app.post('/api/public/redeem', rateLimit('redeem', 60, 10 * 60 * 1000), (req, res) => {
   const db = readDB();
   const { restaurantId } = req.body;
   const restaurant = db.leads.find((l) => l.id === restaurantId);
@@ -789,18 +874,29 @@ app.get('/api/leads/:id/promotions', (req, res) => {
 // ---- Twilio inbound webhook — handles STOP replies ----
 // Point your Twilio phone number's "A message comes in" webhook at:
 // https://<your-domain>/api/sms/inbound
+// Twilio's Advanced Opt-Out also replies to STOP/START/HELP automatically; we keep our records in sync.
 app.post('/api/sms/inbound', express.urlencoded({ extended: false }), (req, res) => {
   const from = normalizePhone(req.body.From);
   const body = (req.body.Body || '').trim().toUpperCase();
-  if (from && ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT'].includes(body)) {
-    const db = readDB();
-    db.customers
-      .filter((c) => c.phone === from)
-      .forEach((c) => { c.optedOut = true; c.smsConsent = false; });
+  const db = readDB();
+  const mine = from ? db.customers.filter((c) => c.phone === from) : [];
+  const restaurant = mine.length ? db.leads.find((l) => l.id === mine[0].restaurantId) : null;
+  const name = restaurant ? restaurant.restaurantName : 'InTheLoop';
+  const now = new Date().toISOString();
+  let reply = '';
+  if (['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT', 'REVOKE', 'OPTOUT'].includes(body)) {
+    mine.forEach((c) => { c.optedOut = true; c.smsConsent = false; c.smsOptOutAt = now; });
     writeDB(db);
+  } else if (['START', 'UNSTOP', 'YES'].includes(body)) {
+    // Only guests who ticked the box before can rejoin by text.
+    mine.filter((c) => c.smsConsentAt).forEach((c) => { c.optedOut = false; c.smsConsent = true; c.smsRejoinedAt = now; });
+    writeDB(db);
+  } else if (['HELP', 'INFO'].includes(body)) {
+    const contact = process.env.SUPPORT_CONTACT || 'reply here';
+    reply = `${name} Rewards: For help contact ${contact}. Msg & data rates may apply. Reply STOP to cancel.`;
   }
   res.set('Content-Type', 'text/xml');
-  res.send('<Response></Response>');
+  res.send(reply ? `<Response><Message>${escHtml(reply)}</Message></Response>` : '<Response></Response>');
 });
 
 
@@ -1193,6 +1289,12 @@ async function runScheduledJobs() {
 }
 setInterval(runScheduledJobs, 15 * 60 * 1000);
 runScheduledJobs();
+
+// ---- Custom 404 (must stay after every route) ----
+app.use((req, res) => {
+  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
+  res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+});
 
 app.listen(PORT, '0.0.0.0', () => {
   const modes = [];
