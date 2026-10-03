@@ -8,15 +8,6 @@ document.getElementById('yr').textContent = new Date().getFullYear();
   tick(); setInterval(tick, 1000);
 })();
 
-// A little celebration when the page opens, from the example phone
-window.addEventListener('load', () => {
-  const phone = document.querySelector('.hero-video');
-  if (!phone || !window.celebrate) return;
-  const r = phone.getBoundingClientRect();
-  if (r.bottom < 0 || r.top > window.innerHeight) return;
-  setTimeout(() => window.celebrate({ count: 140, origin: { x: (r.left + r.width / 2) / window.innerWidth, y: Math.max(0.1, (r.top + r.height / 2) / window.innerHeight) } }), 500);
-});
-
 // Show a friendly placeholder until the MP4 is uploaded to public/media/
 (function () {
   const v = document.getElementById('vsl');
