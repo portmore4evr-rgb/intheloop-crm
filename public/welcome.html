@@ -5,13 +5,30 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>InTheLoop — Turn first-timers into regulars</title>
 <meta name="description" content="InTheLoop turns first-time restaurant guests into regulars: guests tap a table tag, get rewards, build visit streaks and win bigger prizes, while you get a monthly report.">
+<link rel="canonical" href="__BASE_URL__/welcome">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="InTheLoop">
+<meta property="og:title" content="InTheLoop: turn first-timers into regulars">
+<meta property="og:description" content="Tap-to-join rewards, streaks and prizes for local restaurants. No app, no tablet. First month free.">
+<meta property="og:url" content="__BASE_URL__/welcome">
+<meta property="og:image" content="__BASE_URL__/media/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="InTheLoop: Turn first-timers into regulars. Tap-to-join rewards for local restaurants.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="__BASE_URL__/media/og-image.png">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#2f3a22">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@600&display=swap" rel="stylesheet">
 <style>
   :root {
     --green: #56633f; --green-deep: #2f3a22; --green-mid: #8fa36a; --green-light: #e6edd5;
-    --orange: #c67139; --orange-bright: #e0894d; --orange-deep: #8c491a; --gold: #f2c14e;
+    --orange: #a95623; --orange-bright: #e0894d; --orange-deep: #8c491a; --gold: #f2c14e;
     --cream: #f5ead8; --paper: #fbf6ee; --ink: #201e1d; --muted: #5f574b; --line: #ddd2bf;
     --display: "Caprasimo", Georgia, serif;
     --body: "Figtree", "Helvetica Neue", Arial, sans-serif;
@@ -31,7 +48,7 @@
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-family: var(--display); font-size: 19px; padding: 15px 28px; border-radius: 999px; text-decoration: none; border: 0; cursor: pointer; transition: transform .15s, background-color .15s; }
   .btn:hover { transform: translateY(-2px); }
   .btn-orange { background: var(--orange); color: #fff; }
-  .btn-orange:hover { background: #b2622d; color: #fff; }
+  .btn-orange:hover { background: #8f481c; color: #fff; }
   .btn-ghost { background: transparent; color: var(--cream); border: 2px solid rgba(245,234,216,.45); }
   .btn-ghost:hover { border-color: var(--cream); color: #fff; }
 
@@ -235,7 +252,7 @@
 
     <div class="hero-video">
       <div class="video-frame">
-        <video id="vsl" controls playsinline preload="metadata" poster="/media/media/intheloop-vsl-poster.jpg">
+        <video id="vsl" controls playsinline preload="metadata" poster="/media/media/intheloop-vsl-poster.jpg" aria-label="InTheLoop explainer video: how guests tap a table sticker, earn rewards and build streaks, about one minute" title="How InTheLoop works">
           <source src="/media/media/intheloop-vsl.mp4" type="video/mp4">
         </video>
         <div id="vsl-missing" class="hidden">
@@ -411,6 +428,10 @@
         <label for="b-time">Preferred meeting time</label>
         <input id="b-time" required type="datetime-local">
       </div>
+      <div class="hp" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden">
+        <label for="b-website">Leave this empty</label>
+        <input id="b-website" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
       <button type="submit" class="btn btn-orange">Request my meeting</button>
       <p id="book-error" class="hidden" role="alert"></p>
       <div id="book-done" class="hidden" role="status">
@@ -425,6 +446,7 @@
   <div class="wrap">
     <span class="logo">IN<span>THE</span>LOOP</span>
     <span>Worcester, MA</span>
+    <span><a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms#terms" style="color:inherit">Terms</a></span>
     <span class="copy">© <span id="yr"></span> InTheLoop</span>
   </div>
 </footer>

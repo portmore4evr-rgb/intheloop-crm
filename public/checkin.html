@@ -3,7 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>You're In The Loop</title>
+<title>Join the rewards · InTheLoop</title>
+<meta name="description" content="Tap or scan at your table to join this restaurant's rewards: a reward every visit, prizes at 3, 5 and 10 visits, and bonus prizes for weekly streaks.">
+<meta name="robots" content="noindex">
+<meta property="og:title" content="Join the rewards · InTheLoop">
+<meta property="og:description" content="A reward every visit, prizes for regulars. No app needed.">
+<meta property="og:image" content="__BASE_URL__/media/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#2f3a22">
+<link rel="preconnect" href="https://cdn.tailwindcss.com">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
@@ -14,7 +25,7 @@
         colors: {
           paper: '#f5ead8', paper2: '#fbf6ee', ink: '#201e1d', inksoft: '#5f574b',
           greendeep: '#2f3a22', greenmid: '#8fa36a', gold: '#f2c14e', orangebright: '#e0894d',
-          amber: '#c67139', amberdark: '#b2622d', amberdeep: '#8c491a', brick: '#8c491a', line: '#ddd2bf', okgreen: '#56633f',
+          amber: '#a95623', amberdark: '#8f481c', amberdeep: '#8c491a', brick: '#8c491a', line: '#ddd2bf', okgreen: '#56633f',
         },
         fontFamily: {
           display: ['Caprasimo', 'serif'],
@@ -34,7 +45,7 @@
   .guest-hero::before { content: ""; position: absolute; width: 340px; height: 340px; border-radius: 50%; background: #56633f; right: -120px; top: -140px; opacity: .6; z-index: -1; }
   .guest-hero::after { content: ""; position: absolute; width: 180px; height: 180px; border-radius: 50%; background: #c67139; left: -80px; bottom: -110px; opacity: .45; z-index: -1; }
   #scan-card { box-shadow: 0 18px 38px rgba(32,30,29,.28); }
-  .offer-card { background: #c67139; color: #fff; border-radius: 32px; box-shadow: 0 16px 34px rgba(140,73,26,.25); }
+  .offer-card { background: #a95623; color: #fff; border-radius: 32px; box-shadow: 0 16px 34px rgba(140,73,26,.25); }
   .ticket-perf { background-image: repeating-linear-gradient(90deg, #c0b6a5 0 8px, transparent 8px 15px); height: 2px; }
   :focus-visible { outline: 2px solid #c67139; outline-offset: 2px; }
   .font-mono.uppercase { font-weight: 600; }
@@ -92,12 +103,13 @@
       <input id="phone-input" type="tel" autocomplete="tel" placeholder="(555) 555-5555" class="w-full bg-paper border border-line rounded-full px-4 py-3 mb-4 text-ink placeholder:text-inksoft/50 focus:outline-none focus:border-amber">
       <label class="font-mono text-[11px] uppercase tracking-wider text-inksoft mb-2 block">Email <span class="normal-case tracking-normal">(optional)</span></label>
       <input id="email-input" type="email" autocomplete="email" placeholder="you@email.com" class="w-full bg-paper border border-line rounded-full px-4 py-3 mb-4 text-ink placeholder:text-inksoft/50 focus:outline-none focus:border-amber">
-      <label class="flex items-start gap-2 text-xs text-inksoft mb-4 cursor-pointer">
+      <label id="consent-wrap" class="hidden flex items-start gap-2 text-xs text-inksoft mb-4 cursor-pointer">
         <input id="consent-input" type="checkbox" class="mt-0.5 accent-amber w-4 h-4 shrink-0">
-        <span id="consent-text">Yes, text or email me my Reward ID and occasional offers from this restaurant. Msg frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out anytime.</span>
+        <span><span id="consent-text">Yes, text me rewards, reminders and offers. Up to 4 msgs/month. Msg &amp; data rates may apply. Reply STOP to cancel, HELP for help. Consent is not a condition of purchase.</span> <span class="opacity-80">(Optional)</span></span>
       </label>
       <button onclick="checkIn()" class="w-full bg-amber text-paper2 font-display text-lg py-3.5 rounded-full hover:bg-amberdark transition">Unlock My Reward</button>
       <p id="checkin-error" class="text-brick text-xs text-center mt-2 hidden"></p>
+      <p class="text-[11px] text-inksoft text-center mt-3">By joining you agree to the <a href="/terms#terms" target="_blank" class="underline">Program Terms</a> and <a href="/privacy" target="_blank" class="underline">Privacy Policy</a>. Emails include an unsubscribe link.</p>
     </div>
   </div>
 
@@ -179,17 +191,18 @@
           <option value="social">Saw you on social media</option>
           <option value="event">Here for an event / game night</option>
       </select>
-      <label class="flex items-start gap-2 text-xs text-inksoft mb-4 cursor-pointer">
+      <label id="join-consent-wrap" class="hidden flex items-start gap-2 text-xs text-inksoft mb-4 cursor-pointer">
         <input id="join-consent" type="checkbox" class="mt-0.5 accent-amber w-4 h-4 shrink-0">
-        <span id="join-consent-text">Yes, text or email me my Reward ID and occasional offers from this restaurant. Msg frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out anytime.</span>
+        <span><span id="join-consent-text">Yes, text me rewards, reminders and offers. Up to 4 msgs/month. Msg &amp; data rates may apply. Reply STOP to cancel, HELP for help. Consent is not a condition of purchase.</span> <span class="opacity-80">(Optional)</span></span>
       </label>
       <button id="join-btn" class="w-full bg-amber text-paper2 font-display text-lg py-3.5 rounded-full hover:bg-amberdark transition">Unlock My Reward</button>
       <p id="join-error" class="text-brick text-xs text-center mt-2 hidden"></p>
+      <p class="text-[11px] text-inksoft text-center mt-3">By joining you agree to the <a href="/terms#terms" target="_blank" class="underline">Program Terms</a> and <a href="/privacy" target="_blank" class="underline">Privacy Policy</a>.</p>
       <button id="join-not-me" class="block mx-auto text-inksoft text-xs underline mt-4">Not you? Use different info</button>
     </div>
   </div>
 
-  <p class="text-center text-xs text-inksoft mt-8">Powered by <span class="font-display text-sm text-ink">IN<span class="text-amber">THE</span>LOOP</span></p>
+  <p class="text-center text-xs text-inksoft mt-8">Powered by <span class="font-display text-sm text-ink">IN<span class="text-amberdeep">THE</span>LOOP</span></p>
 
   <!-- NEW BADGE CELEBRATION -->
   <div id="badge-modal" class="hidden fixed inset-0 z-50 bg-ink/80 flex items-end sm:items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="badge-title">
