@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png?v=2" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2">
+<meta name="theme-color" content="#2f3a22">
+<meta name="robots" content="noindex">
+<meta name="description" content="InTheLoop CRM for managing restaurant clients.">
+<title>InTheLoop — CRM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg: '#f5ead8', panel: '#fbf6ee', panel2: '#f3ecdf', paper: '#fbf6ee',
+          greendeep: '#2f3a22', greenmid: '#8fa36a', gold: '#f2c14e', orangebright: '#e0894d',
+          ink: '#201e1d', inkmute: '#645c50',
+          teal: '#56633f', tealdim: '#728157', tealight: '#e6edd5',
+          amber: '#a95623', amberdark: '#8f481c', amberdeep: '#8c491a', brick: '#8c491a', hair: '#dcd3c4',
+        },
+        fontFamily: {
+          display: ['Caprasimo', 'serif'],
+          body: ['Figtree', 'sans-serif'],
+          mono: ['Figtree', 'sans-serif'],
+          code: ['"IBM Plex Mono"', 'monospace'],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  body { background-color:#f5ead8; }
+  /* Same look as the landing page: deep green header, cream ground, paper cards, orange actions */
+  .dot-field { background: #f5ead8; }
+  .card { background:#fbf6ee; border:1px solid #ddd2bf; border-radius: 26px; }
+  .tab-active { background:#a95623; color:#ffffff; }
+  .tab-inactive { color:#e3dccb; }
+  .tab-inactive:hover { background:rgba(245,234,216,.12); color:#ffffff; }
+  .app-header { background:#2f3a22; color:#f5ead8; position: sticky; top: 0; z-index: 30; overflow: hidden; }
+  .app-header::after { content:""; position:absolute; right:-90px; top:-130px; width:300px; height:300px; border-radius:50%; background:#56633f; opacity:.6; z-index:-1; }
+  .page-title { font-family: 'Caprasimo', serif; font-size: 40px; line-height: 1.05; margin: 0 0 20px; }
+  .stage-head { border-radius: 999px; padding: 6px 12px; }
+  ::selection { background: rgba(198,113,57,0.3); color:#201e1d; }
+  :focus-visible { outline: 2px solid #c67139; outline-offset: 2px; }
+  #modal-backdrop { background: rgba(46,43,37,0.5); }
+  #modal-backdrop { background: rgba(47,58,34,0.6); }
+  #modal-backdrop .card { background:#fbf6ee; box-shadow: 0 20px 44px rgba(47,58,34,0.3); }
+  a { color:#8c491a; } a:hover { color:#b2622d; }
+  .font-mono.uppercase { font-weight: 600; letter-spacing: 0.08em; }
+  /* Pipeline: all 5 stages fit the page width, no sideways scrolling */
+  .pipeline-grid { display: grid; gap: 12px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .pipeline-grid > * { min-width: 0; }
+  .pipeline-grid p, .pipeline-grid button { overflow-wrap: anywhere; }
+  @media (max-width: 900px) { .pipeline-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 520px) { .pipeline-grid { grid-template-columns: 1fr; } }
+  /* Drag and drop between stages */
+  .lead-card { cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+  .drag-source { opacity: .35; }
+  .drag-ghost { position: fixed; z-index: 60; pointer-events: none; cursor: grabbing; transform: rotate(2deg); box-shadow: 0 12px 28px rgba(46,43,37,.25); border-color: #c67139 !important; }
+  body.dragging, body.dragging * { cursor: grabbing !important; }
+  .stage-col { transition: background-color .15s, outline-color .15s; outline: 2px dashed transparent; outline-offset: -2px; }
+  .stage-col.drop-target { outline-color: #c67139; background-color: rgba(198,113,57,.08); }
+</style>
+</head>
+<body class="font-body text-ink antialiased dot-field">
+
+<header class="app-header isolate">
+  <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+    <span class="font-display text-2xl text-bg">IN<span class="text-orangebright">THE</span>LOOP <span class="text-[#c9c0ad] font-body font-normal text-sm">· CRM</span></span>
+    <button id="btn-add-lead" class="bg-amber text-white font-display text-base px-5 py-2.5 rounded-full hover:bg-amberdark transition">+ Add Lead</button>
+  </div>
+  <nav class="max-w-6xl mx-auto px-6 flex flex-wrap gap-1 pb-3">
+    <button data-tab="pipeline" class="tab-btn tab-active px-4 py-2 rounded-full text-sm font-medium">Pipeline</button>
+    <button data-tab="restaurants" class="tab-btn tab-inactive px-4 py-2 rounded-full text-sm font-medium">Restaurants</button>
+    <button data-tab="analytics" class="tab-btn tab-inactive px-4 py-2 rounded-full text-sm font-medium">Analytics</button>
+  </nav>
+</header>
+
+<main class="max-w-6xl mx-auto px-6 py-8">
+
+  <!-- PIPELINE VIEW -->
+  <section id="view-pipeline">
+    <p class="font-mono text-xs uppercase tracking-wider text-amberdeep mb-1">Lead pipeline</p>
+    <h1 class="page-title">Drag leads toward <span class="text-amber">Live Client.</span></h1>
+    <div id="pipeline-board" class="pipeline-grid"></div>
+  </section>
+
+  <!-- RESTAURANTS VIEW -->
+  <section id="view-restaurants" class="hidden">
+    <p class="font-mono text-xs uppercase tracking-wider text-amberdeep mb-1">Restaurant profiles</p>
+    <h1 class="page-title">Every restaurant, <span class="text-teal">one list.</span></h1>
+    <div class="card overflow-hidden">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-inkmute font-mono text-xs uppercase border-b border-hair">
+            <th class="px-5 py-3 font-medium">Restaurant</th>
+            <th class="px-5 py-3 font-medium">Contact</th>
+            <th class="px-5 py-3 font-medium">Slowest Night</th>
+            <th class="px-5 py-3 font-medium">Every-visit reward</th>
+            <th class="px-5 py-3 font-medium">Stage</th>
+          </tr>
+        </thead>
+        <tbody id="restaurants-tbody" class="divide-y divide-hair"></tbody>
+      </table>
+      <p id="restaurants-empty" class="text-center text-inkmute text-sm py-10 hidden">No restaurants yet — add your first lead to get started.</p>
+    </div>
+  </section>
+
+  <!-- ANALYTICS VIEW -->
+  <section id="view-analytics" class="hidden">
+    <p class="font-mono text-xs uppercase tracking-wider text-amberdeep mb-1">Analytics</p>
+    <h1 class="page-title">How the loop is <span class="text-amber">growing.</span></h1>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-5">
+      <div class="card p-5">
+        <p class="font-mono text-xs uppercase tracking-wider text-inkmute mb-2">Total Leads</p>
+        <p id="kpi-total" class="font-display text-4xl">0</p>
+      </div>
+      <div class="card p-5">
+        <p class="font-mono text-xs uppercase tracking-wider text-inkmute mb-2">Live Clients</p>
+        <p id="kpi-live" class="font-display text-4xl text-teal">0</p>
+      </div>
+      <div class="card p-5">
+        <p class="font-mono text-xs uppercase tracking-wider text-inkmute mb-2">Conversion Rate</p>
+        <p id="kpi-conversion" class="font-display text-4xl text-amberdeep">0%</p>
+      </div>
+      <div class="card p-5">
+        <p class="font-mono text-xs uppercase tracking-wider text-inkmute mb-2">Deals Closed (30d)</p>
+        <p id="kpi-deals" class="font-display text-4xl">0</p>
+      </div>
+    </div>
+    <div class="grid sm:grid-cols-2 gap-5 mb-8">
+      <div class="card p-5 !bg-tealight">
+        <p class="font-mono text-xs uppercase tracking-wider text-inkmute mb-2">Total Diners Captured (All Restaurants)</p>
+        <p id="kpi-customers" class="font-display text-4xl text-teal">0</p>
+      </div>
+      <div class="card p-5 !bg-[#fff2eb]">
+        <p class="font-mono text-xs uppercase tracking-wider text-inkmute mb-2">Total Redemptions (All Restaurants)</p>
+        <p id="kpi-redemptions" class="font-display text-4xl text-amberdeep">0</p>
+      </div>
+    </div>
+
+    <div class="grid lg:grid-cols-5 gap-6">
+      <div class="lg:col-span-3 card p-6">
+        <p class="font-mono text-xs uppercase tracking-wider text-inkmute mb-6">Pipeline Funnel</p>
+        <div id="funnel-bars" class="space-y-4"></div>
+      </div>
+      <div class="lg:col-span-2 card p-6">
+        <p class="font-mono text-xs uppercase tracking-wider text-inkmute mb-4">Recent Activity</p>
+        <div id="recent-activity" class="space-y-3"></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- LEAD DETAIL / ADD MODAL -->
+<div id="modal-backdrop" class="hidden fixed inset-0 z-40 flex items-center justify-center p-4">
+  <div class="card w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-5">
+      <h2 id="modal-title" class="font-display text-2xl">Add Lead</h2>
+      <button id="modal-close" class="text-inkmute hover:text-ink text-xl leading-none">&times;</button>
+    </div>
+    <form id="lead-form" class="space-y-4">
+      <input type="hidden" id="f-id">
+      <div>
+        <label class="font-mono text-xs uppercase tracking-wider text-inkmute mb-1 block">Restaurant Name</label>
+        <input id="f-restaurantName" type="text" required class="w-full bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label class="font-mono text-xs uppercase tracking-wider text-inkmute mb-1 block">Contact Name</label>
+          <input id="f-contactName" type="text" class="w-full bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+        </div>
+        <div>
+          <label class="font-mono text-xs uppercase tracking-wider text-inkmute mb-1 block">Phone</label>
+          <input id="f-phone" type="tel" class="w-full bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+        </div>
+      </div>
+      <div>
+        <label class="font-mono text-xs uppercase tracking-wider text-inkmute mb-1 block">Email</label>
+        <input id="f-email" type="email" class="w-full bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label class="font-mono text-xs uppercase tracking-wider text-inkmute mb-1 block">Slowest Night</label>
+          <select id="f-slowestNight" class="w-full bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+            <option value="">—</option>
+            <option>Sunday</option><option>Monday</option><option>Tuesday</option>
+            <option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option>
+          </select>
+        </div>
+        <div>
+          <label class="font-mono text-xs uppercase tracking-wider text-inkmute mb-1 block">Stage</label>
+          <select id="f-stage" class="w-full bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal"></select>
+        </div>
+      </div>
+      <div>
+        <label class="font-mono text-xs uppercase tracking-wider text-inkmute mb-1 block">Google Review Link</label>
+        <input id="f-googleReviewLink" type="url" placeholder="https://g.page/your-restaurant/review" class="w-full bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          <label class="block text-xs font-mono uppercase tracking-wider text-inkmute mt-3 mb-1">Staff PIN (4 digits)</label>
+          <input id="f-staffPin" type="text" inputmode="numeric" maxlength="4" pattern="\d{4}" class="w-full bg-bg border border-hair rounded-full px-4 py-2 text-sm font-code focus:outline-none focus:border-teal">
+      </div>
+      <fieldset class="rounded-3xl bg-[#e6edd5] p-4 space-y-4 border-0">
+        <legend class="sr-only">Rewards</legend>
+        <div>
+          <p class="font-display text-xl">What guests get</p>
+          <p class="text-xs text-inkmute">Shown on the guest's phone and in their emails. Leave a prize blank to use the example in the box.</p>
+        </div>
+        <label class="flex items-start gap-3 bg-white/60 rounded-2xl p-3 cursor-pointer">
+          <input id="f-smsEnabled" type="checkbox" class="mt-1 w-4 h-4 shrink-0 accent-[#c67139]">
+          <span class="min-w-0"><span class="text-sm font-semibold block">Text add-on active (prepaid)</span><span class="block text-xs text-inkmute">Turn on only after the owner pays for texts and the carrier registration is approved. Shows the optional "OK to text me" box on the guest sign-up page.</span></span>
+        </label>
+        <div>
+          <p class="font-mono text-[11px] uppercase tracking-wider text-amberdeep mb-2">Every visit</p>
+          <div class="min-w-0">
+            <label for="f-currentOffer" class="text-sm font-semibold block mb-1">Reward for every return visit</label><span class="block text-xs text-inkmute mb-1">First-time guests unlock it on their next visit, then once per day.</span>
+            <input id="f-currentOffer" type="text" placeholder="e.g. Free fries" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          </div>
+        </div>
+        <div>
+          <p class="font-mono text-[11px] uppercase tracking-wider text-amberdeep mb-2">Visit milestones</p>
+          <div class="grid sm:grid-cols-3 gap-3">
+          <div class="min-w-0">
+            <label for="f-prize3" class="text-sm font-semibold block mb-1">3rd visit</label>
+            <input id="f-prize3" type="text" placeholder="Free dessert" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          </div>
+          <div class="min-w-0">
+            <label for="f-prize5" class="text-sm font-semibold block mb-1">5th visit</label>
+            <input id="f-prize5" type="text" placeholder="Free appetizer" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          </div>
+          <div class="min-w-0">
+            <label for="f-prize10" class="text-sm font-semibold block mb-1">10th visit</label>
+            <input id="f-prize10" type="text" placeholder="Free entrée" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          </div>
+          </div>
+        </div>
+        <div>
+          <p class="font-mono text-[11px] uppercase tracking-wider text-teal mb-2">Weekly streaks</p>
+          <div class="grid sm:grid-cols-3 gap-3">
+          <div class="min-w-0">
+            <label for="f-prizestreak2" class="text-sm font-semibold block mb-1">2 weeks in a row</label>
+            <input id="f-prizestreak2" type="text" placeholder="Badge only" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          </div>
+          <div class="min-w-0">
+            <label for="f-prizestreak4" class="text-sm font-semibold block mb-1">4 weeks in a row</label>
+            <input id="f-prizestreak4" type="text" placeholder="Free drink" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          </div>
+          <div class="min-w-0">
+            <label for="f-prizestreak8" class="text-sm font-semibold block mb-1">8 weeks in a row</label>
+            <input id="f-prizestreak8" type="text" placeholder="Badge only" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          </div>
+          </div>
+        </div>
+      </fieldset>
+      <p id="live-since-display" class="hidden font-mono text-xs text-teal">● Live client since —</p>
+      <div>
+        <label class="font-mono text-xs uppercase tracking-wider text-inkmute mb-1 block">Notes</label>
+        <textarea id="f-notes" rows="3" class="w-full bg-bg border border-hair rounded-3xl px-4 py-2.5 focus:outline-none focus:border-teal resize-none"></textarea>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="flex-1 bg-amber text-bg font-semibold py-2.5 rounded-full hover:bg-amberdark transition">Save</button>
+        <button type="button" id="btn-delete" class="hidden border border-brick text-brick px-4 py-2.5 rounded-full font-semibold hover:bg-brick hover:text-bg transition">Delete</button>
+      </div>
+    </form>
+
+    <div id="customers-section" class="hidden mt-6 pt-6 border-t border-hair">
+      <h3 class="font-display text-xl mb-1">Customer Check-In Link</h3>
+      <p class="text-inkmute text-sm mb-4">Point a QR code or NFC tag at this link — it's the page their customers actually see.</p>
+      <div class="flex flex-col sm:flex-row gap-4 items-start mb-6">
+        <img id="checkin-qr" src="" alt="Check-in QR code" class="rounded-3xl bg-[#f9f4ed] p-2 w-32 h-32">
+        <div class="flex-1 w-full">
+          <button id="btn-copy-checkin" class="border border-teal text-teal rounded-2xl px-4 py-2 font-semibold text-sm mb-2 hover:bg-teal hover:text-bg transition">Copy link</button>
+          <div id="checkin-link-display" class="bg-bg border border-hair rounded-2xl px-3 py-2 font-mono text-xs text-inkmute break-all"></div>
+        </div>
+      </div>
+
+      <h3 class="font-display text-xl mb-1">Staff Redeem Page</h3>
+      <p class="text-inkmute text-sm mb-3">Bookmark this on the register tablet/phone. Staff type the guest's Reward ID + this PIN on each return visit.</p>
+      <div class="flex flex-col sm:flex-row gap-2 mb-2">
+        <div id="redeem-link-display" class="flex-1 bg-bg border border-hair rounded-2xl px-3 py-2 font-mono text-xs text-inkmute break-all"></div>
+        <div class="bg-bg border border-hair rounded-full px-4 py-2 text-sm">PIN <span id="staff-pin-display" class="font-code font-semibold text-teal"></span></div>
+      </div>
+      <p class="text-inkmute text-xs mb-6">Reward IDs here start with <span id="reward-code-display" class="font-code"></span>. Change the PIN any time in the Staff PIN field above and save.</p>
+
+      <h3 class="font-display text-xl mb-1">Customers <span id="customers-count" class="text-inkmute font-body font-normal text-sm"></span></h3>
+      <p class="text-inkmute text-sm mb-4">Everyone who's checked in at this restaurant.</p>
+      <div id="customers-list" class="space-y-2 mb-4 max-h-56 overflow-y-auto"></div>
+      <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 mb-6">
+        <input id="cust-name" type="text" placeholder="Name" class="min-w-0 bg-bg border border-hair rounded-full px-3 py-2 text-sm focus:outline-none focus:border-teal">
+        <input id="cust-phone" type="tel" placeholder="Phone" class="min-w-0 bg-bg border border-hair rounded-full px-3 py-2 text-sm focus:outline-none focus:border-teal">
+        <button id="btn-add-customer" class="bg-teal text-bg font-semibold text-sm px-4 rounded-full hover:bg-amber transition">Add</button>
+      </div>
+
+      <h3 class="font-display text-xl mb-1">Send a Promotion</h3>
+      <p class="text-inkmute text-sm mb-3">Texts everyone in the selected audience right now. STOP opt-out is added automatically.</p>
+      <textarea id="promo-message" rows="2" placeholder="e.g. Flash deal tonight — free dessert with any entrée!" class="w-full bg-bg border border-hair rounded-2xl px-3 py-2.5 text-sm mb-3 focus:outline-none focus:border-teal resize-none"></textarea>
+      <div class="flex gap-2 mb-3">
+        <select id="promo-audience" class="flex-1 min-w-0 bg-bg border border-hair rounded-full px-3 py-2 text-sm focus:outline-none focus:border-teal">
+          <option value="all">All customers</option>
+          <option value="new">New (0 redemptions)</option>
+          <option value="returning">Returning (1+ redemptions)</option>
+        </select>
+        <button id="btn-send-promo" class="bg-amber text-bg font-semibold text-sm px-5 rounded-full hover:bg-amberdark transition">Send</button>
+      </div>
+      <p id="promo-status" class="text-xs text-teal mb-4 hidden"></p>
+
+      <h3 class="font-display text-xl mb-1">Automate a Promotion</h3>
+      <p class="text-inkmute text-sm mb-3">Repeats every week on the day you pick — no manual sending required.</p>
+      <textarea id="auto-message" rows="2" placeholder="e.g. It's Wednesday — free dessert with any entrée tonight!" class="w-full bg-bg border border-hair rounded-2xl px-3 py-2.5 text-sm mb-3 focus:outline-none focus:border-teal resize-none"></textarea>
+      <div class="flex flex-wrap gap-2 mb-3">
+        <select id="auto-day" class="bg-bg border border-hair rounded-full px-3 py-2 text-sm focus:outline-none focus:border-teal">
+          <option>Sunday</option><option>Monday</option><option>Tuesday</option>
+          <option selected>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option>
+        </select>
+        <select id="auto-audience" class="flex-1 min-w-[150px] bg-bg border border-hair rounded-full px-3 py-2 text-sm focus:outline-none focus:border-teal">
+          <option value="all">All customers</option>
+          <option value="new">New (0 redemptions)</option>
+          <option value="returning">Returning (1+ redemptions)</option>
+        </select>
+        <button id="btn-add-automation" class="bg-teal text-bg font-semibold text-sm px-4 rounded-full hover:bg-amber transition">Save</button>
+      </div>
+      <div id="automations-list" class="space-y-2 mb-6"></div>
+
+      <h3 class="font-display text-xl mb-1">Recent Promotions</h3>
+      <div id="promotions-list" class="space-y-2 max-h-40 overflow-y-auto"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
