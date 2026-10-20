@@ -264,8 +264,11 @@ function processScan(db, restaurant, customer, visit) {
 
 function maskPhone(p) { const d = String(p || '').replace(/\D/g, ''); return d.length >= 4 ? '•••-•••-' + d.slice(-4) : ''; }
 
+// Save to a temporary file first, then swap it in, so a restart mid-save can never leave a half-written database.
 function writeDB(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+  const tmp = `${DB_PATH}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, DB_PATH);
 }
 
 // ---- Force HTTPS (Railway terminates SSL and tells us the original protocol) ----
@@ -313,7 +316,7 @@ function sendPage(res, file, { analytics = false } = {}) {
 
 // ---- Optional admin password for the CRM itself ----
 // Set ADMIN_PASSWORD in Railway Variables. Guest (check-in) and staff (redeem) pages stay open.
-const PUBLIC_PREFIXES = ['/unsubscribe/', '/welcome', '/media/', '/js/welcome.js', '/js/confetti.js', '/checkin/', '/redeem/', '/api/public/', '/api/sms/inbound', '/js/checkin.js', '/js/redeem.js', '/favicon', '/apple-touch-icon.png', '/privacy', '/terms', '/robots.txt', '/sitemap.xml'];
+const PUBLIC_PREFIXES = ['/unsubscribe/', '/welcome', '/media/', '/js/welcome.js', '/js/confetti.js', '/checkin/', '/redeem/', '/api/public/', '/api/sms/inbound', '/js/checkin.js', '/js/redeem.js', '/favicon', '/apple-touch-icon.png', '/privacy', '/terms', '/robots.txt', '/sitemap.xml', '/owner/'];
 app.use((req, res, next) => {
   const pass = process.env.ADMIN_PASSWORD;
   if (!pass || PUBLIC_PREFIXES.some((p) => req.path.startsWith(p))) return next();
@@ -420,6 +423,8 @@ app.post('/api/leads', (req, res) => {
     prizestreak2: req.body.prizestreak2 || '',
     prizestreak4: req.body.prizestreak4 || '',
     prizestreak8: req.body.prizestreak8 || '',
+    minSpend: cleanMoney(req.body.minSpend),
+    minSpendBig: cleanMoney(req.body.minSpendBig),
     smsEnabled: req.body.smsEnabled === true, // texting is a prepaid add-on; off until the owner buys it
     stage,
     liveSince: stage === 'Live Client' ? now : null,
@@ -446,6 +451,8 @@ app.put('/api/leads/:id', (req, res) => {
   delete body.rewardCode; // reward IDs already issued depend on these – never overwritten from the form
   delete body.rewardCounter;
   if (body.smsEnabled !== undefined) body.smsEnabled = body.smsEnabled === true;
+  if (body.minSpend !== undefined) body.minSpend = cleanMoney(body.minSpend);
+  if (body.minSpendBig !== undefined) body.minSpendBig = cleanMoney(body.minSpendBig);
   if (body.staffPin !== undefined && !/^\d{4}$/.test(String(body.staffPin))) delete body.staffPin;
   const updated = {
     ...existing,
@@ -480,6 +487,95 @@ app.get('/api/leads/:id/customers', (req, res) => {
       lastVisitLabel: VISIT_TYPES[c.lastVisitType] || '',
     }));
   res.json(customers);
+});
+
+// Guest list export (CSV opens in Excel, Numbers or Google Sheets).
+function guestCsv(db, lead) {
+  const cell = (v) => {
+    let s = v == null ? '' : String(v);
+    if (/^(=|@|[+\-](?!\d))/.test(s)) s = "'" + s; // stop spreadsheet formulas from running (phone numbers like +1508 are left alone)
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const day = (iso) => (iso ? String(iso).slice(0, 10) : '');
+  const header = ['Name', 'Phone', 'Email', 'Reward ID', 'Joined', 'Visits', 'Rewards redeemed', 'First visit reason', 'OK to text', 'Unsubscribed from email'];
+  const rows = db.customers
+    .filter((c) => c.restaurantId === lead.id)
+    .sort((a, b) => new Date(a.optedInAt) - new Date(b.optedInAt))
+    .map((c) => [c.name, c.phone, c.email, c.rewardId, day(c.optedInAt), c.checkinCount || 1, c.redemptionCount || 0,
+      VISIT_TYPES[c.firstVisitType] || '', c.smsConsent === true && !c.optedOut ? 'Yes' : 'No', c.emailOptOut ? 'Yes' : 'No']);
+  return '\ufeff' + [header, ...rows].map((r) => r.map(cell).join(',')).join('\r\n');
+}
+function sendCsv(res, lead, csv) {
+  const safe = lead.restaurantName.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'restaurant';
+  res.set('Content-Disposition', `attachment; filename="${safe}-guest-list.csv"`);
+  res.type('text/csv').send(csv);
+}
+// CRM (login required)
+app.get('/api/leads/:id/customers.csv', (req, res) => {
+  const db = readDB();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).send('Not found');
+  sendCsv(res, lead, guestCsv(db, lead));
+});
+
+// ---- Owner page: a private, read-only link per restaurant (no password). The secret link is the key. ----
+function ensureOwnerToken(lead) {
+  if (!lead.ownerToken) lead.ownerToken = crypto.randomBytes(18).toString('base64url');
+  return lead.ownerToken;
+}
+const ownerUrl = (lead) => `${publicBaseUrl()}/owner/${lead.ownerToken}`;
+function leadByOwnerToken(db, token) {
+  const t = String(token || '');
+  return t.length >= 20 ? db.leads.find((l) => l.ownerToken && l.ownerToken === t) : null;
+}
+app.get('/api/leads/:id/owner-link', (req, res) => {
+  const db = readDB();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).json({ error: 'Not found' });
+  const had = !!lead.ownerToken;
+  ensureOwnerToken(lead);
+  if (!had) writeDB(db);
+  res.json({ url: ownerUrl(lead) });
+});
+app.post('/api/leads/:id/owner-link/reset', (req, res) => {
+  const db = readDB();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).json({ error: 'Not found' });
+  lead.ownerToken = null;
+  ensureOwnerToken(lead);
+  writeDB(db);
+  res.json({ url: ownerUrl(lead) });
+});
+app.get('/owner/:token/guests.csv', rateLimit('owner', 60, 10 * 60 * 1000), (req, res) => {
+  const db = readDB();
+  const lead = leadByOwnerToken(db, req.params.token);
+  if (!lead) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  sendCsv(res, lead, guestCsv(db, lead));
+});
+app.get('/owner/:token', rateLimit('owner', 60, 10 * 60 * 1000), (req, res) => {
+  const db = readDB();
+  const lead = leadByOwnerToken(db, req.params.token);
+  if (!lead) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  const which = req.query.period === 'last' ? 'last' : 'current';
+  const { html } = buildOwnerReport(db, lead, which);
+  const members = db.customers.filter((c) => c.restaurantId === lead.id).length;
+  const base = `/owner/${encodeURIComponent(lead.ownerToken)}`;
+  const tab = (p, label) => `<a href="${base}${p === 'last' ? '?period=last' : ''}" style="padding:8px 14px;border-radius:999px;text-decoration:none;font-weight:700;${which === p ? 'background:#2f3a22;color:#f5ead8' : 'color:#2f3a22;border:1px solid #ddd2bf'}">${label}</a>`;
+  res.set('Cache-Control', 'no-store');
+  res.send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escHtml(lead.restaurantName)} · InTheLoop results</title><meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+</head><body style="margin:0;background:#f9f4ed;color:#201e1d;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif">
+<header style="background:#2f3a22;color:#f5ead8;padding:20px 16px"><div style="max-width:640px;margin:0 auto">
+<div style="font-weight:800;letter-spacing:.08em;font-size:13px">IN<span style="color:#e89a63">THE</span>LOOP</div>
+<h1 style="font-family:Georgia,serif;font-weight:400;font-size:28px;margin:6px 0 2px">${escHtml(lead.restaurantName)}</h1>
+<p style="margin:0;opacity:.85">${members} ${members === 1 ? 'guest' : 'guests'} in your loop · updated live</p></div></header>
+<main style="max-width:640px;margin:0 auto;padding:18px 16px 40px">
+<nav style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${tab('current', 'This month')}${tab('last', 'Last month')}
+<a href="${base}/guests.csv" style="padding:8px 14px;border-radius:999px;text-decoration:none;font-weight:700;background:#a95623;color:#fff">Download guest list</a></nav>
+${html}
+<p style="color:#645c50;font-size:13px;margin-top:24px">This page is private to your restaurant. Don't share the link. Questions? Text or email Christopher.</p>
+</main></body></html>`);
 });
 
 // Why guests came in, per restaurant (from the check-in dropdown)
@@ -527,6 +623,12 @@ function publicBaseUrl() {
   if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/$/, '');
   if (process.env.RAILWAY_PUBLIC_DOMAIN) return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
   return `http://localhost:${PORT}`;
+}
+
+// Minimum order to redeem: a whole-dollar amount, or null for no minimum.
+function cleanMoney(v) {
+  const n = Math.round(Number(String(v ?? '').replace(/[^0-9.]/g, '')));
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 500) : null;
 }
 
 function escHtml(str) {
@@ -613,6 +715,8 @@ app.get('/api/public/restaurant/:id', (req, res) => {
     currentOffer: restaurant.currentOffer,
     slowestNight: restaurant.slowestNight,
     smsEnabled: !!restaurant.smsEnabled,
+    minSpend: restaurant.minSpend || null,
+    minSpendBig: restaurant.minSpendBig || null,
   });
 });
 
@@ -778,7 +882,41 @@ app.post('/api/public/book', rateLimit('book', 5, 60 * 60 * 1000), (req, res) =>
   db.leads.unshift(lead);
   writeDB(db);
   res.status(201).json({ ok: true });
+  notifyBooking(lead, when).catch((e) => console.error('Booking email failed:', e.message));
 });
+
+// Landing-page bookings: alert Christopher right away, and confirm to the owner if they left an email.
+// The alert address comes from BOOKING_ALERT_EMAIL in Railway, with Christopher's address as the default.
+async function notifyBooking(lead, when) {
+  const to = process.env.BOOKING_ALERT_EMAIL || 'wint_christopher@yahoo.com';
+  const crm = `${publicBaseUrl()}/`;
+  const row = (k, v) => `<tr><td style="padding:6px 12px 6px 0;color:#5f574b">${k}</td><td style="padding:6px 0"><b>${escHtml(v || 'not given')}</b></td></tr>`;
+  await sendEmail({
+    to,
+    fromName: 'InTheLoop',
+    subject: `New meeting request: ${lead.restaurantName}`,
+    html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;color:#201e1d">
+      <h2 style="margin:0 0 6px">New meeting request</h2>
+      <p style="margin:0 0 14px;color:#5f574b">Someone booked from the InTheLoop landing page.</p>
+      <table style="border-collapse:collapse;font-size:15px">
+        ${row('Restaurant', lead.restaurantName)}${row('Phone', lead.phone)}${row('Email', lead.email)}${row('Preferred time', when)}
+      </table>
+      <p style="margin:18px 0"><a href="${crm}" style="background:#a95623;color:#fff;text-decoration:none;padding:11px 20px;border-radius:999px;font-weight:bold">Open the CRM</a></p>
+      <p style="font-size:13px;color:#5f574b">They're in the "New Lead" column. Reply within the hour if you can.</p></div>`,
+  });
+  if (lead.email) {
+    await sendEmail({
+      to: lead.email,
+      fromName: 'InTheLoop',
+      subject: `We got your request, ${lead.restaurantName}`,
+      html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;color:#201e1d">
+        <h2 style="margin:0 0 10px">Thanks, ${escHtml(lead.restaurantName)}!</h2>
+        <p>We got your request to meet${when ? ` on <b>${escHtml(when)}</b>` : ''}. Christopher will confirm the time with you shortly.</p>
+        <p>In the meeting, you'll see how a sticker on each table turns first-time guests into regulars, with no app and no tablet for your staff.</p>
+        <p style="color:#5f574b">InTheLoop · Worcester, MA</p></div>`,
+    });
+  }
+}
 
 // Staff redeem: requires the restaurant's staff PIN + the guest's Reward ID.
 // A redemption counts as a RETURN visit, so it isn't allowed on the day they signed up,
@@ -875,7 +1013,23 @@ app.get('/api/leads/:id/promotions', (req, res) => {
 // Point your Twilio phone number's "A message comes in" webhook at:
 // https://<your-domain>/api/sms/inbound
 // Twilio's Advanced Opt-Out also replies to STOP/START/HELP automatically; we keep our records in sync.
+// Twilio signs every webhook with your auth token. Requests without a valid signature are ignored,
+// so nobody can fake a STOP and switch off a guest's texts.
+function validTwilioSignature(req) {
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  const sig = String(req.headers['x-twilio-signature'] || '');
+  if (!token || !sig) return false;
+  const url = publicBaseUrl() + (req.originalUrl || req.url);
+  const data = Object.keys(req.body || {}).sort().reduce((acc, k) => acc + k + req.body[k], url);
+  const expected = crypto.createHmac('sha1', token).update(Buffer.from(data, 'utf-8')).digest('base64');
+  return expected.length === sig.length && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig));
+}
+
 app.post('/api/sms/inbound', express.urlencoded({ extended: false }), (req, res) => {
+  if (!validTwilioSignature(req)) {
+    console.warn('Ignored /api/sms/inbound request without a valid Twilio signature');
+    return res.status(403).type('text/xml').send('<Response></Response>');
+  }
   const from = normalizePhone(req.body.From);
   const body = (req.body.Body || '').trim().toUpperCase();
   const db = readDB();
@@ -1171,9 +1325,11 @@ function buildOwnerReport(db, lead, which) {
 async function sendOwnerReport(db, lead, which) {
   const report = buildOwnerReport(db, lead, which);
   if (!lead.email) return { status: 'no_email', report };
-  const result = await sendEmail({ to: lead.email, subject: report.subject, html: report.html, fromName: 'InTheLoop' });
+  ensureOwnerToken(lead);
+  const html = report.html + `<p style="font-family:Arial,sans-serif;max-width:560px;margin:16px auto 0"><a href="${ownerUrl(lead)}" style="background:#a95623;color:#fff;text-decoration:none;padding:11px 20px;border-radius:999px;font-weight:bold">See your live results anytime</a></p>`;
+  const result = await sendEmail({ to: lead.email, subject: report.subject, html, fromName: 'InTheLoop' });
   if (process.env.REPORT_COPY_TO) {
-    await sendEmail({ to: process.env.REPORT_COPY_TO, subject: `[copy] ${report.subject}`, html: report.html, fromName: 'InTheLoop' });
+    await sendEmail({ to: process.env.REPORT_COPY_TO, subject: `[copy] ${report.subject}`, html, fromName: 'InTheLoop' });
   }
   db.messages.unshift({ id: crypto.randomUUID(), restaurantId: lead.id, type: 'owner_report', channel: 'email',
                         body: report.subject, sentAt: new Date().toISOString(), status: result.status });
