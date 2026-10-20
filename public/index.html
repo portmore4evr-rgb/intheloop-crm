@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png?v=2" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2">
 <meta name="theme-color" content="#2f3a22">
 <meta name="robots" content="noindex">
 <meta name="description" content="InTheLoop CRM for managing restaurant clients.">
@@ -255,6 +255,21 @@
             <label for="f-prizestreak8" class="text-sm font-semibold block mb-1">8 weeks in a row</label>
             <input id="f-prizestreak8" type="text" placeholder="Badge only" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
           </div>
+          </div>
+        </div>
+        <div>
+          <p class="font-mono text-[11px] uppercase tracking-wider text-amberdeep mb-2">Minimum order to redeem</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="min-w-0">
+              <label for="f-minSpend" class="text-sm font-semibold block mb-1">Every-visit reward</label>
+              <span class="block text-xs text-inkmute mb-1">About 60–75% of their average check. Leave blank for no minimum.</span>
+              <input id="f-minSpend" type="number" inputmode="numeric" min="0" step="1" placeholder="e.g. 15" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+            </div>
+            <div class="min-w-0">
+              <label for="f-minSpendBig" class="text-sm font-semibold block mb-1">Milestone and streak prizes</label>
+              <span class="block text-xs text-inkmute mb-1">Optional higher minimum for the bigger prizes. Blank uses the one on the left.</span>
+              <input id="f-minSpendBig" type="number" inputmode="numeric" min="0" step="1" placeholder="e.g. 25" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+            </div>
           </div>
         </div>
       </fieldset>
