@@ -1,6 +1,8 @@
 const restaurantId = window.location.pathname.split('/checkin/')[1];
 const TOKEN_KEY = 'itl_guest_token';
 let currentOffer = '';
+let minSpend = null, minSpendBig = null; // minimum order to redeem, set per restaurant in the CRM
+const minText = (n) => (n ? `with a $${n}+ order` : '');
 let restaurantName = '';
 
 // ---- saved-on-this-phone token (so guests only fill the form once) ----
@@ -126,12 +128,13 @@ function showPass(data, heading) {
   document.getElementById('scan-card').className = `rounded-[32px] p-7 pop-in text-center text-paper2 ${look.cls}`;
   document.getElementById('pass-heading').textContent = heading;
   document.getElementById('scan-label').textContent = look.label;
-  document.getElementById('scan-sub').textContent = look.sub;
+  const need = scan.status === 'reward' ? minSpend : scan.status === 'bonus' ? minSpendBig : null;
+  document.getElementById('scan-sub').textContent = need ? `${look.sub}. Valid ${minText(need)}.` : look.sub;
   document.getElementById('visit-code').textContent = scan.code || '—';
   document.getElementById('pass-offer-text').textContent =
-    scan.status === 'bonus' ? scan.prize
-      : scan.status === 'reward' ? (currentOffer || 'Your reward')
-      : scan.status === 'new' ? `Next time: ${currentOffer || 'your reward'}` : 'Thanks for coming back!';
+    scan.status === 'bonus' ? `${scan.prize}${minSpendBig ? ` ${minText(minSpendBig)}` : ''}`
+      : scan.status === 'reward' ? `${currentOffer || 'Your reward'}${minSpend ? ` ${minText(minSpend)}` : ''}`
+      : scan.status === 'new' ? `Next time: ${currentOffer || 'your reward'}${minSpend ? ` ${minText(minSpend)}` : ''}` : 'Thanks for coming back!';
   document.getElementById('reward-id').textContent = c.rewardId || '—';
   document.getElementById('visit-number').textContent =
     `${c.memberNumber ? `Member #${c.memberNumber} · ` : ''}Visit #${c.visitNumber || 1}`;
@@ -160,7 +163,10 @@ async function loadRestaurant() {
       document.getElementById('consent-wrap').classList.remove('hidden');
       document.getElementById('join-consent-wrap').classList.remove('hidden');
     }
-    document.getElementById('offer-text').textContent = data.currentOffer || 'Ask your server about today\'s deal!';
+    minSpend = data.minSpend || null;
+    minSpendBig = data.minSpendBig || data.minSpend || null;
+    document.getElementById('offer-text').textContent = data.currentOffer
+      ? `${data.currentOffer}${minSpend ? ` ${minText(minSpend)}` : ''}` : 'Ask your server about today\'s deal!';
     currentOffer = data.currentOffer || '';
   } catch (e) {
     document.getElementById('restaurant-name').textContent = 'Restaurant not found';

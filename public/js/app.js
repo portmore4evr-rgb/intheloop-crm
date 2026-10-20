@@ -294,6 +294,8 @@ function openModal(id) {
     document.getElementById('f-currentOffer').value = lead.currentOffer || '';
     document.getElementById('f-googleReviewLink').value = lead.googleReviewLink || '';
     document.getElementById('f-smsEnabled').checked = !!lead.smsEnabled;
+    document.getElementById('f-minSpend').value = lead.minSpend || '';
+    document.getElementById('f-minSpendBig').value = lead.minSpendBig || '';
     PRIZE_KEYS.forEach((k) => { document.getElementById(`f-prize${k}`).value = lead[`prize${k}`] || ''; });
     document.getElementById('f-notes').value = lead.notes || '';
     document.getElementById('f-staffPin').value = lead.staffPin || '';
@@ -389,6 +391,8 @@ async function saveLead() {
     currentOffer: document.getElementById('f-currentOffer').value,
     googleReviewLink: document.getElementById('f-googleReviewLink').value,
     smsEnabled: document.getElementById('f-smsEnabled').checked,
+    minSpend: document.getElementById('f-minSpend').value.trim(),
+    minSpendBig: document.getElementById('f-minSpendBig').value.trim(),
     ...Object.fromEntries(PRIZE_KEYS.map((k) => [`prize${k}`, document.getElementById(`f-prize${k}`).value.trim()])),
     notes: document.getElementById('f-notes').value,
   };
@@ -532,7 +536,15 @@ function renderOwnerTools(lead) {
       <a href="/api/leads/${lead.id}/report" target="_blank" class="border border-teal text-teal rounded-lg px-3 py-1.5 text-sm font-semibold hover:bg-teal hover:text-bg transition">Preview this month</a>
       <a href="/api/leads/${lead.id}/report?period=last" target="_blank" class="border border-hair text-inkmute rounded-lg px-3 py-1.5 text-sm hover:border-teal transition">Preview last month</a>
       <button id="btn-send-report" class="bg-teal text-bg rounded-lg px-3 py-1.5 text-sm font-semibold hover:bg-amber transition">Email report to owner now</button>
+      <a href="/api/leads/${lead.id}/customers.csv" class="border border-teal text-teal rounded-lg px-3 py-1.5 text-sm font-semibold hover:bg-teal hover:text-bg transition">Download guest list (CSV)</a>
       <a href="/api/backup" class="border border-hair text-inkmute rounded-lg px-3 py-1.5 text-sm hover:border-teal transition">Download full backup</a>
+    </div>
+    <h3 class="font-display font-800 text-xl mt-5 mb-1">Owner Page</h3>
+    <p class="text-inkmute text-sm mb-2">A private link the owner can open anytime to see their live results and download their guest list. No password needed, so only send it to the owner.</p>
+    <div class="flex flex-wrap gap-2 mb-2">
+      <button id="btn-owner-link" class="bg-teal text-bg rounded-lg px-3 py-1.5 text-sm font-semibold hover:bg-amber transition">Copy owner link</button>
+      <a id="owner-link-open" href="#" target="_blank" class="border border-teal text-teal rounded-lg px-3 py-1.5 text-sm font-semibold hover:bg-teal hover:text-bg transition">Open owner page</a>
+      <button id="btn-owner-reset" class="border border-hair text-inkmute rounded-lg px-3 py-1.5 text-sm hover:border-teal transition">Make a new link (old one stops working)</button>
     </div>
     <p id="owner-tools-status" class="text-xs text-teal hidden"></p>`;
 
@@ -543,6 +555,24 @@ function renderOwnerTools(lead) {
     await fetch(`/api/leads/${lead.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ avgCheck: v }) });
     lead.avgCheck = v;
     status(`Saved: reports now use $${v} per return visit.`);
+  });
+  let ownerLink = '';
+  const loadOwnerLink = async (reset) => {
+    const res = await fetch(`/api/leads/${lead.id}/owner-link${reset ? '/reset' : ''}`, reset ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' } : {});
+    const data = await res.json().catch(() => ({}));
+    ownerLink = data.url || '';
+    document.getElementById('owner-link-open').href = ownerLink || '#';
+    return ownerLink;
+  };
+  loadOwnerLink(false);
+  document.getElementById('btn-owner-link').addEventListener('click', async () => {
+    const url = ownerLink || await loadOwnerLink(false);
+    try { await navigator.clipboard.writeText(url); status('Owner link copied. Text it to the owner.'); }
+    catch (e) { status(url); }
+  });
+  document.getElementById('btn-owner-reset').addEventListener('click', async () => {
+    await loadOwnerLink(true);
+    status('New owner link made. The old link no longer works.');
   });
   document.getElementById('btn-send-report').addEventListener('click', async () => {
     const res = await fetch(`/api/leads/${lead.id}/report/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
