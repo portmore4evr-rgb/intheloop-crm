@@ -1,0 +1,1780 @@
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { sendSms, SIMULATION_MODE } = require('./sms');
+const { sendEmail, EMAIL_SIMULATION } = require('./email');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+// Set DATA_DIR to a Railway Volume mount (e.g. /app/data) so data survives redeploys.
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const DB_PATH = path.join(DATA_DIR, 'db.json');
+const TIMEZONE = process.env.TIMEZONE || 'America/New_York';
+const ID_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I/L look-alikes
+const FOLLOWUP_DELAY_HOURS = 48;
+const REVIEW_REQUEST_DELAY_HOURS = 2; // sent after redemption, timed for "on their way out"
+const FIRST_VISIT_EMAIL_DELAY_HOURS = 2; // thank-you + Reward ID + review link after a guest joins
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+const STAGES = [
+  'New Lead',
+  'Discovery Call',
+  'Offer Designed',
+  'Onboarding',
+  'Live Client',
+];
+
+// ---- tiny JSON file "database" ----
+function readDB() {
+  if (!fs.existsSync(DB_PATH)) {
+    fs.writeFileSync(DB_PATH, JSON.stringify({ leads: [], customers: [], messages: [], automations: [] }, null, 2));
+  }
+  const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+  if (!db.customers) db.customers = []; // upgrade older db.json files in place
+  if (!db.messages) db.messages = [];
+  if (!db.automations) db.automations = [];
+  if (!db.redemptions) db.redemptions = [];
+  if (!db.visits) db.visits = [];
+  if (!db.draws) db.draws = [];
+  return db;
+}
+
+// ---- helpers: phones, emails, reward IDs, staff PINs ----
+function normalizePhone(raw) {
+  const str = String(raw || '').trim();
+  const digits = str.replace(/\D/g, '');
+  if (digits.length === 10) return '+1' + digits;
+  if (digits.length === 11 && digits.startsWith('1')) return '+' + digits;
+  if (str.startsWith('+') && digits.length >= 10) return '+' + digits;
+  return '';
+}
+
+function normalizeEmail(raw) {
+  const e = String(raw || '').trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : '';
+}
+
+function localDay(date) {
+  return new Date(date).toLocaleDateString('en-CA', { timeZone: TIMEZONE }); // YYYY-MM-DD
+}
+
+function randomChars(n) {
+  let out = '';
+  for (let i = 0; i < n; i++) out += ID_CHARS[crypto.randomInt(ID_CHARS.length)];
+  return out;
+}
+
+function newStaffPin() {
+  return String(crypto.randomInt(1000, 10000));
+}
+
+// Short restaurant code used as the Reward ID prefix, e.g. "Mama's Kitchen" -> "MAMA"
+function makeRewardCode(name, leads, selfId) {
+  let base = String(name || 'REST').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4) || 'REST';
+  while (base.length < 3) base += 'X';
+  let code = base;
+  let n = 2;
+  while (leads.some((l) => l.id !== selfId && l.rewardCode === code)) code = base + n++;
+  return code;
+}
+
+// Backfill reward fields on restaurants created before this feature existed.
+function ensureRewardFields(lead, db) {
+  let changed = false;
+  if (!lead.rewardCode) { lead.rewardCode = makeRewardCode(lead.restaurantName, db.leads, lead.id); changed = true; }
+  if (typeof lead.rewardCounter !== 'number') { lead.rewardCounter = 0; changed = true; }
+  if (!lead.staffPin) { lead.staffPin = newStaffPin(); changed = true; }
+  return changed;
+}
+
+// Generates the next unique Reward ID for a restaurant, e.g. MAMA-0007-K3
+function nextRewardId(lead, db) {
+  ensureRewardFields(lead, db);
+  let id;
+  do {
+    lead.rewardCounter += 1;
+    id = `${lead.rewardCode}-${String(lead.rewardCounter).padStart(4, '0')}-${randomChars(2)}`;
+  } while (db.customers.some((c) => c.rewardId === id));
+  return id;
+}
+
+function publicCustomer(c) {
+  return { name: c.name, rewardId: c.rewardId, redemptionCount: c.redemptionCount || 0,
+           visitNumber: c.checkinCount || 1, memberNumber: Number(String(c.rewardId || '').split('-')[1]) || null };
+}
+
+// Why the guest is here today (dropdown on the check-in page)
+const VISIT_TYPES = {
+  first_time: 'First time here',
+  regular: "I'm a regular",
+  friend: 'A friend sent me',
+  takeout: 'Picking up takeout',
+  celebrating: 'Celebrating something',
+  social: 'Saw you on social media',
+  event: 'Here for an event / game night',
+};
+function cleanVisitType(v) { return VISIT_TYPES[v] ? v : ''; }
+
+// Secret token saved on the guest's phone so they never re-enter their info.
+function newDeviceToken() { return crypto.randomBytes(24).toString('base64url'); }
+function ensureDeviceToken(c) { if (!c.deviceToken) c.deviceToken = newDeviceToken(); return c.deviceToken; }
+
+// One logged check-in per guest per day (the latest answer wins).
+function logVisit(db, customer, visitType, via) {
+  const today = localDay(new Date());
+  let visit = db.visits.find((v) => v.customerId === customer.id && v.day === today);
+  if (visit) {
+    if (visitType) visit.visitType = visitType;
+  } else {
+    visit = { id: crypto.randomUUID(), restaurantId: customer.restaurantId, customerId: customer.id,
+              day: today, visitType: visitType || '', via, at: new Date().toISOString() };
+    db.visits.unshift(visit);
+    customer.checkinCount = (customer.checkinCount || 0) + 1;
+    customer.lastCheckinAt = visit.at;
+  }
+  if (visitType) customer.lastVisitType = visitType;
+  return visit;
+}
+
+// Status the guest sees on their pass
+function passStatus(customer) {
+  const today = localDay(new Date());
+  if (customer.lastRedemptionAt && localDay(customer.lastRedemptionAt) === today) return 'redeemed_today';
+  if (localDay(customer.optedInAt) === today) return 'joined_today';
+  return 'ready';
+}
+
+// Every scan (one per guest per day) gets its own visit code the server reads at a glance:
+//   R-0143 = REWARD: give the reward (logged automatically, once per day)
+//   N-0143 = NEW member who joined today (reward starts next visit)
+//   X-0143 = reward already used today
+// The number counts up with every visit at the restaurant. Re-scanning the same day shows the same code.
+//   S-0143 = SAVED: visit counted, but rewards wait for the slow-night window (nothing to give today)
+//   W-0143 = WINNER: this guest won the weekly free-meal draw (meal up to the restaurant's cap)
+const SCAN_LETTERS = { reward: 'R', new: 'N', used: 'X', bonus: 'B', saved: 'S', meal: 'W' };
+
+// ---- Slow-night window: rewards and prizes can only be used on these evenings ----
+// Visits on busy nights still count (badges, streaks, draw entries) and their prizes are saved for the window.
+const DEFAULT_REDEEM_DAYS = [1, 2, 3]; // Mon, Tue, Wed
+const DEFAULT_REDEEM_FROM = '17:00';
+const DEFAULT_REDEEM_TO = '20:00';
+const BANK_DAYS = 30; // saved prizes and free-meal wins expire after this many days
+const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function cleanDays(v) {
+  const arr = (Array.isArray(v) ? v : String(v || '').split(',')).map((x) => Number(x)).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
+  return [...new Set(arr)].sort((a, b) => a - b);
+}
+function cleanTime(v) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || '').trim());
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return '';
+  return `${m[1].padStart(2, '0')}:${m[2]}`;
+}
+const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+function redeemWindow(r) {
+  const days = Array.isArray(r.redeemDays) && r.redeemDays.length ? r.redeemDays : DEFAULT_REDEEM_DAYS;
+  const from = cleanTime(r.redeemFrom) || DEFAULT_REDEEM_FROM;
+  let to = cleanTime(r.redeemTo) || DEFAULT_REDEEM_TO;
+  if (toMin(to) <= toMin(from)) to = '23:59';
+  return { days, from, to };
+}
+function localParts(date) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: TIMEZONE, weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date).map((x) => [x.type, x.value]));
+  return { dow: SHORT_DAYS.indexOf(p.weekday), minutes: Number(p.hour) * 60 + Number(p.minute), day: `${p.year}-${p.month}-${p.day}` };
+}
+function zonedToUtc(day, hhmm) { // local restaurant time -> real instant
+  const [y, m, d] = day.split('-').map(Number);
+  const [h, mi] = hhmm.split(':').map(Number);
+  const want = Date.UTC(y, m - 1, d, h, mi);
+  let t = want;
+  for (let i = 0; i < 2; i += 1) {
+    const p = localParts(new Date(t));
+    const [py, pm, pd] = p.day.split('-').map(Number);
+    t += want - Date.UTC(py, pm - 1, pd, Math.floor(p.minutes / 60), p.minutes % 60);
+  }
+  return new Date(t);
+}
+function inRedeemWindow(r, date = new Date()) {
+  const w = redeemWindow(r);
+  const p = localParts(date);
+  return w.days.includes(p.dow) && p.minutes >= toMin(w.from) && p.minutes < toMin(w.to);
+}
+function fmtClock(t) {
+  const [h, m] = t.split(':').map(Number);
+  const hr = h % 12 || 12;
+  return `${hr}${m ? `:${String(m).padStart(2, '0')}` : ''}${h < 12 ? 'am' : 'pm'}`;
+}
+function daysLabel(days) {
+  if (days.length === 7) return 'Every day';
+  const runs = [];
+  days.forEach((d) => { const last = runs[runs.length - 1]; if (last && d === last[1] + 1) last[1] = d; else runs.push([d, d]); });
+  const parts = runs.flatMap(([a, b]) => (a === b ? [SHORT_DAYS[a]] : b === a + 1 ? [SHORT_DAYS[a], SHORT_DAYS[b]] : [`${SHORT_DAYS[a]}–${SHORT_DAYS[b]}`]));
+  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} & ${parts[parts.length - 1]}` : parts[0];
+}
+function windowLabel(r) { const w = redeemWindow(r); return `${daysLabel(w.days)}, ${fmtClock(w.from)}–${fmtClock(w.to)}`; }
+function windowInfo(r, now = new Date()) {
+  const w = redeemWindow(r);
+  const openNow = inRedeemWindow(r, now);
+  let opensAt = null; let closesAt = null;
+  for (let i = 0; i < 9; i += 1) {
+    const p = localParts(new Date(now.getTime() + i * 86400000));
+    if (!w.days.includes(p.dow)) continue;
+    const open = zonedToUtc(p.day, w.from); const close = zonedToUtc(p.day, w.to);
+    if (openNow && now >= open && now < close) { closesAt = close.toISOString(); break; }
+    if (!openNow && open > now) { opensAt = open.toISOString(); break; }
+  }
+  return { label: windowLabel(r), days: w.days, from: w.from, to: w.to, openNow, opensAt, closesAt };
+}
+
+// Prizes and free-meal wins earned outside the window wait in the guest's "bank" until a slow night.
+function activeBank(customer) {
+  const now = Date.now();
+  customer.bank = (customer.bank || []).filter((b) => !b.expiresAt || Date.parse(b.expiresAt) > now);
+  return customer.bank;
+}
+function bankItem(kind, label, extra = {}) {
+  return { id: crypto.randomUUID(), kind, label, earnedAt: new Date().toISOString(),
+           expiresAt: new Date(Date.now() + BANK_DAYS * 86400000).toISOString(), ...extra };
+}
+
+// ---- Weekly free-meal draw ----
+// Every day a guest checks in = 1 entry (no purchase needed, see /rules). Monday 9am the server picks
+// one winner per restaurant for last week (Mon–Sun), weighted by entries. The meal is capped by the owner.
+const DEFAULT_DRAW_CAP = 40;
+const drawOn = (r) => r.drawEnabled !== false;
+const drawCap = (r) => (Number(r.drawCap) > 0 ? Number(r.drawCap) : DEFAULT_DRAW_CAP);
+function weekEntries(db, restaurantId, wk) {
+  const end = weeksBefore(wk, -1);
+  const byCustomer = new Map();
+  db.visits.forEach((v) => {
+    if (v.restaurantId === restaurantId && v.day >= wk && v.day < end) byCustomer.set(v.customerId, (byCustomer.get(v.customerId) || 0) + 1);
+  });
+  return byCustomer;
+}
+function shortName(c) {
+  const parts = String(c.name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'A lucky guest';
+  return parts[0] + (parts[1] ? ` ${parts[1][0].toUpperCase()}.` : '');
+}
+function lastDraw(db, restaurantId) {
+  return db.draws.filter((d) => d.restaurantId === restaurantId).sort((a, b) => (a.week < b.week ? 1 : -1))[0] || null;
+}
+function drawStatusFor(db, restaurant, customer) {
+  if (!drawOn(restaurant)) return null;
+  const wk = weekStart(localDay(new Date()));
+  const entries = customer ? (weekEntries(db, restaurant.id, wk).get(customer.id) || 0) : 0;
+  const last = lastDraw(db, restaurant.id);
+  return { cap: drawCap(restaurant), entries, lastWinner: last && last.winnerName ? last.winnerName : '' };
+}
+
+// ---- Streaks, badges and bigger prizes ----
+// A streak = weeks in a row (Mon-Sun) with at least one visit. Visit milestones and a 4-week
+// streak unlock bonus prizes the owner sets in the CRM (sensible defaults until they do).
+const VISIT_MILESTONES = [2, 3, 5, 10];
+const STREAK_BADGES = [2, 4, 8];
+const DEFAULT_PRIZES = { 2: 'Free side', 3: 'Free dessert', 5: 'Free appetizer', 10: 'Free entrée', streak2: '', streak4: 'Free drink', streak8: '' };
+function prizeFor(restaurant, key) {
+  const v = restaurant[`prize${key}`];
+  return (v && String(v).trim()) || DEFAULT_PRIZES[key];
+}
+function weekStart(day) { // 'YYYY-MM-DD' -> that week's Monday
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+function weeksBefore(wk, n) {
+  const d = new Date(`${wk}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 7 * n);
+  return d.toISOString().slice(0, 10);
+}
+function streakFor(db, customer) {
+  const weeks = new Set(db.visits.filter((v) => v.customerId === customer.id).map((v) => weekStart(v.day)));
+  const thisWeek = weekStart(localDay(new Date()));
+  const visitedThisWeek = weeks.has(thisWeek);
+  let wk = visitedThisWeek ? thisWeek : weeksBefore(thisWeek, 1);
+  let count = 0;
+  while (weeks.has(wk)) { count += 1; wk = weeksBefore(wk, 1); }
+  const lastWeeks = [5, 4, 3, 2, 1, 0].map((i) => {
+    const w = weeksBefore(thisWeek, i);
+    const label = i === 0 ? 'This wk' : new Date(`${w}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    return { label, visited: weeks.has(w), current: i === 0 };
+  });
+  return { weeks: count, visitedThisWeek, atRisk: count > 0 && !visitedThisWeek, thisWeek, lastWeeks };
+}
+function progressFor(db, restaurant, customer) {
+  const visits = customer.checkinCount || 1;
+  const streak = streakFor(db, customer);
+  const best = Math.max(customer.bestStreak || 0, streak.weeks);
+  const badges = [
+    ...VISIT_MILESTONES.map((n) => ({ id: `v${n}`, kind: 'visits', n, label: `${n} visits`, prize: prizeFor(restaurant, n), earned: visits >= n })),
+    ...STREAK_BADGES.map((n) => ({ id: `s${n}`, kind: 'streak', n, label: `${n}-week streak`,
+      prize: prizeFor(restaurant, `streak${n}`), earned: best >= n })),
+  ];
+  const nextVisit = VISIT_MILESTONES.find((n) => visits < n);
+  return {
+    visits,
+    streak: streak.weeks,
+    bestStreak: best,
+    visitedThisWeek: streak.visitedThisWeek,
+    atRisk: streak.atRisk,
+    lastWeeks: streak.lastWeeks,
+    badges,
+    next: nextVisit ? { n: nextVisit, remaining: nextVisit - visits, prize: prizeFor(restaurant, nextVisit) } : null,
+    saved: activeBank(customer).map((b) => ({ kind: b.kind, label: b.label, expiresAt: b.expiresAt })),
+    draw: drawStatusFor(db, restaurant, customer),
+  };
+}
+
+function processScan(db, restaurant, customer, visit) {
+  if (!visit.code) {
+    const today = localDay(new Date());
+    let status = 'reward';
+    if (localDay(customer.optedInAt) === today) status = 'new';
+    else if (customer.lastRedemptionAt && localDay(customer.lastRedemptionAt) === today) status = 'used';
+
+    // New badges earned on this visit (streak badges can't be earned on join day: one week only)
+    customer.awarded = customer.awarded || [];
+    const visits = customer.checkinCount || 1;
+    const streak = streakFor(db, customer).weeks;
+    customer.bestStreak = Math.max(customer.bestStreak || 0, streak);
+    const newBadges = [];
+    const prizes = [];
+    VISIT_MILESTONES.forEach((n) => {
+      if (visits >= n && !customer.awarded.includes(`v${n}`)) {
+        customer.awarded.push(`v${n}`);
+        const prize = prizeFor(restaurant, n);
+        newBadges.push({ id: `v${n}`, kind: 'visits', label: `${n} visits`, prize });
+        if (visits === n) prizes.push(prize);
+      }
+    });
+    STREAK_BADGES.forEach((n) => {
+      if (customer.bestStreak >= n && !customer.awarded.includes(`s${n}`)) {
+        customer.awarded.push(`s${n}`);
+        const prize = prizeFor(restaurant, `streak${n}`);
+        newBadges.push({ id: `s${n}`, kind: 'streak', label: `${n}-week streak`, prize });
+        if (prize) prizes.push(prize);
+      }
+    });
+    // Outside the slow-night window the visit still counts, but the reward waits and any prize is saved.
+    let mealDrawId = null;
+    let savedPrize = '';
+    if (status === 'reward' && !inRedeemWindow(restaurant)) {
+      status = 'saved';
+      prizes.forEach((p) => activeBank(customer).push(bankItem('prize', p)));
+      savedPrize = prizes.join(' + ');
+      prizes.length = 0;
+    } else if (status === 'reward') {
+      const bank = activeBank(customer);
+      const meal = bank.find((b) => b.kind === 'meal');
+      bank.filter((b) => b.kind === 'prize').forEach((b) => prizes.push(b.label));
+      if (meal) { prizes.unshift(meal.label); mealDrawId = meal.drawId || null; }
+      customer.bank = [];
+      if (meal) status = 'meal';
+      else if (prizes.length) status = 'bonus';
+    }
+
+    restaurant.visitCounter = (restaurant.visitCounter || 0) + 1;
+    visit.code = `${SCAN_LETTERS[status]}-${String(restaurant.visitCounter).padStart(4, '0')}`;
+    visit.scanStatus = status;
+    visit.newBadges = newBadges;
+    if (status === 'bonus' || status === 'meal') visit.prize = prizes.join(' + ');
+    if (savedPrize) visit.savedPrize = savedPrize;
+    if (status === 'reward' || status === 'bonus' || status === 'meal') {
+      const now = new Date().toISOString();
+      customer.redemptionCount = (customer.redemptionCount || 0) + 1;
+      customer.lastRedemptionAt = now;
+      db.redemptions.unshift({
+        id: crypto.randomUUID(), restaurantId: restaurant.id, rewardIdEntered: customer.rewardId,
+        result: 'valid', via: 'scan', visitCode: visit.code, customerId: customer.id, at: now,
+        ...(visit.prize ? { bonusPrize: visit.prize } : {}),
+        ...(status === 'meal' ? { freeMeal: true, drawId: mealDrawId } : {}),
+      });
+      if (mealDrawId) {
+        const draw = db.draws.find((d) => d.id === mealDrawId);
+        if (draw) draw.claimedAt = now;
+      }
+    }
+    visit.firstShown = true;
+    return { code: visit.code, status: visit.scanStatus, at: visit.at, day: visit.day, prize: visit.prize || '', savedPrize: visit.savedPrize || '', newBadges };
+  }
+  // Same-day rescan: same code, no new celebration
+  return { code: visit.code, status: visit.scanStatus, at: visit.at, day: visit.day, prize: visit.prize || '', savedPrize: visit.savedPrize || '', newBadges: [] };
+}
+
+function maskPhone(p) { const d = String(p || '').replace(/\D/g, ''); return d.length >= 4 ? '•••-•••-' + d.slice(-4) : ''; }
+
+// Save to a temporary file first, then swap it in, so a restart mid-save can never leave a half-written database.
+function writeDB(data) {
+  const tmp = `${DB_PATH}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, DB_PATH);
+}
+
+// ---- Force HTTPS (Railway terminates SSL and tells us the original protocol) ----
+app.use((req, res, next) => {
+  if (req.headers['x-forwarded-proto'] === 'http' && process.env.RAILWAY_PUBLIC_DOMAIN) {
+    return res.redirect(308, `https://${req.headers.host}${req.originalUrl || req.url}`);
+  }
+  if (req.headers['x-forwarded-proto'] === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+  next();
+});
+
+const smallJson = express.json({ limit: '50kb' });
+const logoJson = express.json({ limit: '3mb' });
+// Logo uploads carry an image, so they get a bigger limit; everything else stays small.
+app.use((req, res, next) => (/^\/api\/leads\/[^/]+\/logo$/.test(req.path) ? logoJson : smallJson)(req, res, next));
+
+// ---- Spam protection: simple per-IP rate limits for public forms (in memory, resets on redeploy) ----
+const hits = new Map();
+function clientIp(req) { return String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim(); }
+function rateLimit(name, max, windowMs) {
+  return (req, res, next) => {
+    const key = `${name}:${clientIp(req)}`;
+    const now = Date.now();
+    const list = (hits.get(key) || []).filter((t) => now - t < windowMs);
+    if (list.length >= max) {
+      res.set('Retry-After', String(Math.ceil(windowMs / 1000)));
+      return res.status(429).json({ error: 'Too many tries. Please wait a few minutes and try again.' });
+    }
+    list.push(now);
+    hits.set(key, list);
+    next();
+  };
+}
+setInterval(() => { const now = Date.now(); for (const [k, v] of hits) if (!v.some((t) => now - t < 3600000)) hits.delete(k); }, 600000).unref();
+
+// Pages that get the live site address (social previews) and the optional analytics snippet.
+// Analytics: set PLAUSIBLE_DOMAIN (e.g. intheloop.com) or CLOUDFLARE_ANALYTICS_TOKEN in Railway. Both are cookie-free.
+function analyticsSnippet() {
+  if (process.env.PLAUSIBLE_DOMAIN) return `<script defer data-domain="${escHtml(process.env.PLAUSIBLE_DOMAIN)}" src="https://plausible.io/js/script.js"></script>`;
+  if (process.env.CLOUDFLARE_ANALYTICS_TOKEN) return `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "${escHtml(process.env.CLOUDFLARE_ANALYTICS_TOKEN)}"}'></script>`;
+  return '';
+}
+function sendPage(res, file, { analytics = false } = {}) {
+  let html = fs.readFileSync(path.join(__dirname, 'public', file), 'utf8').split('__BASE_URL__').join(publicBaseUrl());
+  if (analytics) html = html.replace('</head>', `${analyticsSnippet()}\n</head>`);
+  res.type('html').send(html);
+}
+
+// ---- Optional admin password for the CRM itself ----
+// Set ADMIN_PASSWORD in Railway Variables. Guest (check-in) and staff (redeem) pages stay open.
+const PUBLIC_PREFIXES = ['/unsubscribe/', '/welcome', '/media/', '/js/welcome.js', '/js/confetti.js', '/checkin/', '/redeem/', '/api/public/', '/api/sms/inbound', '/js/checkin.js', '/js/redeem.js', '/favicon', '/apple-touch-icon.png', '/privacy', '/terms', '/robots.txt', '/sitemap.xml', '/owner/', '/logo/', '/rules'];
+app.use((req, res, next) => {
+  const pass = process.env.ADMIN_PASSWORD;
+  if (!pass || PUBLIC_PREFIXES.some((p) => req.path.startsWith(p))) return next();
+  const header = req.headers.authorization || '';
+  const [, encoded] = header.split(' ');
+  const decoded = encoded ? Buffer.from(encoded, 'base64').toString() : '';
+  const given = decoded.slice(decoded.indexOf(':') + 1);
+  if (given && given.length === pass.length && crypto.timingSafeEqual(Buffer.from(given), Buffer.from(pass))) return next();
+  res.set('WWW-Authenticate', 'Basic realm="Tuesday Club CRM"');
+  res.status(401).send('Login required');
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Official rules for the weekly free-meal draw (linked from every guest page)
+app.get('/rules', (req, res) => sendPage(res, 'rules.html'));
+
+// The public check-in page a QR code / NFC tag points to: /checkin/<restaurantId>
+app.get('/checkin/:restaurantId', (req, res) => {
+  sendPage(res, 'checkin.html');
+});
+
+// Guest privacy policy + program terms (linked under the sign-up button and in every text registration)
+app.get(['/privacy', '/terms'], (req, res) => {
+  const contact = process.env.SUPPORT_CONTACT || process.env.ADMIN_EMAIL || 'reply to any message from us';
+  const html = fs.readFileSync(path.join(__dirname, 'public', 'privacy.html'), 'utf8')
+    .replace('{{CONTACT}}', escHtml(contact))
+    .replace('{{ADDRESS}}', escHtml(process.env.BUSINESS_ADDRESS || 'Tuesday Club, Worcester, MA'));
+  res.type('html').send(html);
+});
+
+// Public landing page with the VSL + booking form: /welcome
+app.get('/welcome', (req, res) => {
+  sendPage(res, 'welcome.html', { analytics: true });
+});
+
+// Search engines: only the landing page and privacy page should be found.
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').send(`User-agent: *\nAllow: /welcome\nAllow: /privacy\nAllow: /media/\nDisallow: /\n\nSitemap: ${publicBaseUrl()}/sitemap.xml\n`);
+});
+app.get('/sitemap.xml', (req, res) => {
+  const base = publicBaseUrl();
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${base}/welcome</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>${base}/privacy</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+</urlset>`);
+});
+
+// Staff-only redeem page (protected by the restaurant's 4-digit staff PIN): /redeem/<restaurantId>
+app.get('/redeem/:restaurantId', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'redeem.html'));
+});
+
+// One-click email unsubscribe (link in every guest email)
+app.get('/unsubscribe/:token', (req, res) => {
+  const db = readDB();
+  const token = String(req.params.token || '');
+  const me = db.customers.find((c) => c.deviceToken && c.deviceToken === token);
+  if (me) {
+    db.customers.filter((c) => c.email && c.email === me.email).forEach((c) => { c.emailOptOut = true; });
+    if (!me.email) me.emailOptOut = true;
+    writeDB(db);
+  }
+  res.send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
+    <body style="font-family:Arial,sans-serif;background:#fff1d6;color:#1d1640;text-align:center;padding:60px 20px">
+    <h2>You're unsubscribed</h2><p>You won't get any more emails from us. Your Reward ID still works in the restaurant.</p></body>`);
+});
+
+// ---- API: stages ----
+app.get('/api/stages', (req, res) => {
+  res.json(STAGES);
+});
+
+// ---- API: leads / restaurants ----
+app.get('/api/leads', (req, res) => {
+  const db = readDB();
+  let changed = false;
+  db.leads.forEach((l) => { if (ensureRewardFields(l, db)) changed = true; });
+  if (changed) writeDB(db);
+  res.json(db.leads);
+});
+
+app.get('/api/leads/:id', (req, res) => {
+  const db = readDB();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).json({ error: 'Not found' });
+  res.json(lead);
+});
+
+app.post('/api/leads', (req, res) => {
+  const db = readDB();
+  const now = new Date().toISOString();
+  const stage = STAGES.includes(req.body.stage) ? req.body.stage : STAGES[0];
+  const lead = {
+    id: crypto.randomUUID(),
+    restaurantName: req.body.restaurantName || 'Untitled Restaurant',
+    contactName: req.body.contactName || '',
+    phone: req.body.phone || '',
+    email: req.body.email || '',
+    slowestNight: req.body.slowestNight || '',
+    currentOffer: req.body.currentOffer || '',
+    googleReviewLink: req.body.googleReviewLink || '',
+    redeemDays: cleanDays(req.body.redeemDays),
+    redeemFrom: cleanTime(req.body.redeemFrom),
+    redeemTo: cleanTime(req.body.redeemTo),
+    drawEnabled: req.body.drawEnabled !== false,
+    drawCap: cleanMoney(req.body.drawCap),
+    prize2: req.body.prize2 || '',
+    prize3: req.body.prize3 || '',
+    prize5: req.body.prize5 || '',
+    prize10: req.body.prize10 || '',
+    prizestreak2: req.body.prizestreak2 || '',
+    prizestreak4: req.body.prizestreak4 || '',
+    prizestreak8: req.body.prizestreak8 || '',
+    minSpend: cleanMoney(req.body.minSpend),
+    minSpendBig: cleanMoney(req.body.minSpendBig),
+    smsEnabled: req.body.smsEnabled === true, // texting is a prepaid add-on; off until the owner buys it
+    stage,
+    liveSince: stage === 'Live Client' ? now : null,
+    notes: req.body.notes || '',
+    rewardCode: makeRewardCode(req.body.restaurantName, db.leads, null),
+    rewardCounter: 0,
+    staffPin: newStaffPin(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  db.leads.unshift(lead);
+  writeDB(db);
+  res.status(201).json(lead);
+});
+
+app.put('/api/leads/:id', (req, res) => {
+  const db = readDB();
+  const idx = db.leads.findIndex((l) => l.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  const existing = db.leads[idx];
+  const newStage = STAGES.includes(req.body.stage) ? req.body.stage : existing.stage;
+  const becomingLive = newStage === 'Live Client' && existing.stage !== 'Live Client';
+  const body = { ...req.body };
+  delete body.rewardCode; // reward IDs already issued depend on these – never overwritten from the form
+  delete body.rewardCounter;
+  delete body.logoFile; delete body.logoVersion; delete body.ownerToken; // set only by their own endpoints
+  if (body.smsEnabled !== undefined) body.smsEnabled = body.smsEnabled === true;
+  if (body.minSpend !== undefined) body.minSpend = cleanMoney(body.minSpend);
+  if (body.minSpendBig !== undefined) body.minSpendBig = cleanMoney(body.minSpendBig);
+  if (body.redeemDays !== undefined) body.redeemDays = cleanDays(body.redeemDays);
+  if (body.redeemFrom !== undefined) body.redeemFrom = cleanTime(body.redeemFrom);
+  if (body.redeemTo !== undefined) body.redeemTo = cleanTime(body.redeemTo);
+  if (body.drawEnabled !== undefined) body.drawEnabled = body.drawEnabled !== false;
+  if (body.drawCap !== undefined) body.drawCap = cleanMoney(body.drawCap);
+  delete body.bank;
+  if (body.staffPin !== undefined && !/^\d{4}$/.test(String(body.staffPin))) delete body.staffPin;
+  const updated = {
+    ...existing,
+    ...body,
+    id: existing.id,
+    stage: newStage,
+    liveSince: becomingLive ? new Date().toISOString() : existing.liveSince || null,
+    updatedAt: new Date().toISOString(),
+  };
+  db.leads[idx] = updated;
+  writeDB(db);
+  res.json(updated);
+});
+
+app.delete('/api/leads/:id', (req, res) => {
+  const db = readDB();
+  db.leads = db.leads.filter((l) => l.id !== req.params.id);
+  db.customers = db.customers.filter((c) => c.restaurantId !== req.params.id);
+  writeDB(db);
+  res.status(204).end();
+});
+
+// ---- API: customers, scoped to one restaurant (owner-side view) ----
+app.get('/api/leads/:id/customers', (req, res) => {
+  const db = readDB();
+  const customers = db.customers
+    .filter((c) => c.restaurantId === req.params.id)
+    .sort((a, b) => new Date(b.optedInAt) - new Date(a.optedInAt))
+    .map(({ deviceToken, ...c }) => ({
+      ...c,
+      firstVisitLabel: VISIT_TYPES[c.firstVisitType] || '',
+      lastVisitLabel: VISIT_TYPES[c.lastVisitType] || '',
+    }));
+  res.json(customers);
+});
+
+// Guest list export (CSV opens in Excel, Numbers or Google Sheets).
+function guestCsv(db, lead) {
+  const cell = (v) => {
+    let s = v == null ? '' : String(v);
+    if (/^(=|@|[+\-](?!\d))/.test(s)) s = "'" + s; // stop spreadsheet formulas from running (phone numbers like +1508 are left alone)
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const day = (iso) => (iso ? String(iso).slice(0, 10) : '');
+  const header = ['Name', 'Phone', 'Email', 'Reward ID', 'Joined', 'Visits', 'Rewards redeemed', 'First visit reason', 'OK to text', 'Unsubscribed from email'];
+  const rows = db.customers
+    .filter((c) => c.restaurantId === lead.id)
+    .sort((a, b) => new Date(a.optedInAt) - new Date(b.optedInAt))
+    .map((c) => [c.name, c.phone, c.email, c.rewardId, day(c.optedInAt), c.checkinCount || 1, c.redemptionCount || 0,
+      VISIT_TYPES[c.firstVisitType] || '', c.smsConsent === true && !c.optedOut ? 'Yes' : 'No', c.emailOptOut ? 'Yes' : 'No']);
+  return '\ufeff' + [header, ...rows].map((r) => r.map(cell).join(',')).join('\r\n');
+}
+function sendCsv(res, lead, csv) {
+  const safe = lead.restaurantName.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'restaurant';
+  res.set('Content-Disposition', `attachment; filename="${safe}-guest-list.csv"`);
+  res.type('text/csv').send(csv);
+}
+// CRM (login required)
+app.get('/api/leads/:id/customers.csv', (req, res) => {
+  const db = readDB();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).send('Not found');
+  sendCsv(res, lead, guestCsv(db, lead));
+});
+
+// ---- Restaurant logos: uploaded in the CRM, stored on the data volume, shown on the guest page and owner page ----
+const LOGO_DIR = path.join(DATA_DIR, 'logos');
+const LOGO_TYPES = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' };
+function logoUrl(lead) { return lead && lead.logoFile ? `/logo/${lead.id}?v=${lead.logoVersion || 1}` : null; }
+function sniffImage(buf) { // trust the file's bytes, not its name
+  if (buf.length > 8 && buf[0] === 0x89 && buf.toString('ascii', 1, 4) === 'PNG') return 'png';
+  if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
+  if (buf.length > 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'webp';
+  return null;
+}
+app.post('/api/leads/:id/logo', (req, res) => {
+  const db = readDB();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).json({ error: 'Not found' });
+  const m = /^data:[^;]+;base64,(.+)$/.exec(String(req.body.dataUrl || ''));
+  if (!m) return res.status(400).json({ error: 'Pick a PNG, JPG or WEBP image.' });
+  const buf = Buffer.from(m[1], 'base64');
+  if (buf.length > 2 * 1024 * 1024) return res.status(400).json({ error: 'That image is over 2 MB. Try a smaller one.' });
+  const ext = sniffImage(buf);
+  if (!ext) return res.status(400).json({ error: 'That file is not a PNG, JPG or WEBP image.' });
+  fs.mkdirSync(LOGO_DIR, { recursive: true });
+  if (lead.logoFile) { try { fs.unlinkSync(path.join(LOGO_DIR, lead.logoFile)); } catch (e) {} }
+  lead.logoFile = `${lead.id}.${ext}`;
+  lead.logoVersion = Date.now();
+  fs.writeFileSync(path.join(LOGO_DIR, lead.logoFile), buf);
+  writeDB(db);
+  res.json({ logoUrl: logoUrl(lead) });
+});
+app.delete('/api/leads/:id/logo', (req, res) => {
+  const db = readDB();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).json({ error: 'Not found' });
+  if (lead.logoFile) { try { fs.unlinkSync(path.join(LOGO_DIR, lead.logoFile)); } catch (e) {} }
+  lead.logoFile = null;
+  writeDB(db);
+  res.json({ logoUrl: null });
+});
+app.get('/logo/:id', (req, res) => {
+  const db = readDB();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  const file = lead && lead.logoFile ? path.join(LOGO_DIR, path.basename(String(lead.logoFile))) : null;
+  if (!file || !fs.existsSync(file)) return res.status(404).send('No logo');
+  res.set('Cache-Control', 'public, max-age=604800');
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.type(LOGO_TYPES[lead.logoFile.split('.').pop()] || 'application/octet-stream').send(fs.readFileSync(file));
+});
+
+// ---- Owner page: a private, read-only link per restaurant (no password). The secret link is the key. ----
+function ensureOwnerToken(lead) {
+  if (!lead.ownerToken) lead.ownerToken = crypto.randomBytes(18).toString('base64url');
+  return lead.ownerToken;
+}
+const ownerUrl = (lead) => `${publicBaseUrl()}/owner/${lead.ownerToken}`;
+function leadByOwnerToken(db, token) {
+  const t = String(token || '');
+  return t.length >= 20 ? db.leads.find((l) => l.ownerToken && l.ownerToken === t) : null;
+}
+app.get('/api/leads/:id/owner-link', (req, res) => {
+  const db = readDB();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).json({ error: 'Not found' });
+  const had = !!lead.ownerToken;
+  ensureOwnerToken(lead);
+  if (!had) writeDB(db);
+  res.json({ url: ownerUrl(lead) });
+});
+app.post('/api/leads/:id/owner-link/reset', (req, res) => {
+  const db = readDB();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).json({ error: 'Not found' });
+  lead.ownerToken = null;
+  ensureOwnerToken(lead);
+  writeDB(db);
+  res.json({ url: ownerUrl(lead) });
+});
+app.get('/owner/:token/guests.csv', rateLimit('owner', 60, 10 * 60 * 1000), (req, res) => {
+  const db = readDB();
+  const lead = leadByOwnerToken(db, req.params.token);
+  if (!lead) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  sendCsv(res, lead, guestCsv(db, lead));
+});
+function ownerDrawBox(db, lead) {
+  const w = windowLabel(lead);
+  const wk = weekStart(localDay(new Date()));
+  const entries = weekEntries(db, lead.id, wk);
+  const total = [...entries.values()].reduce((a, b) => a + b, 0);
+  const last = lastDraw(db, lead.id);
+  const drawLine = !drawOn(lead) ? 'The weekly free-meal draw is off.'
+    : `${total} ${total === 1 ? 'entry' : 'entries'} from ${entries.size} ${entries.size === 1 ? 'guest' : 'guests'} so far this week. Winner picked Monday morning (meal up to $${drawCap(lead)}).`;
+  const lastLine = last ? (last.winnerName ? `Last winner: <b>${escHtml(last.winnerName)}</b> · ${last.claimedAt ? 'claimed' : 'not claimed yet'}` : 'Last week: no entries, no winner.') : '';
+  return `<div style="background:#5b2ee5;color:#fff;border-radius:18px;padding:16px 18px;margin-bottom:16px">
+    <p style="margin:0;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#ffc83d;font-weight:700">Rewards are used</p>
+    <p style="margin:2px 0 10px;font-size:22px;font-weight:800">${escHtml(w)}</p>
+    <p style="margin:0">${drawLine}</p>${lastLine ? `<p style="margin:6px 0 0">${lastLine}</p>` : ''}</div>`;
+}
+app.get('/owner/:token', rateLimit('owner', 60, 10 * 60 * 1000), (req, res) => {
+  const db = readDB();
+  const lead = leadByOwnerToken(db, req.params.token);
+  if (!lead) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  const which = req.query.period === 'last' ? 'last' : 'current';
+  const { html } = buildOwnerReport(db, lead, which);
+  const members = db.customers.filter((c) => c.restaurantId === lead.id).length;
+  const base = `/owner/${encodeURIComponent(lead.ownerToken)}`;
+  const tab = (p, label) => `<a href="${base}${p === 'last' ? '?period=last' : ''}" style="padding:8px 14px;border-radius:999px;text-decoration:none;font-weight:700;${which === p ? 'background:#5b2ee5;color:#fff1d6' : 'color:#5b2ee5;border:1px solid #e6dcf7'}">${label}</a>`;
+  res.set('Cache-Control', 'no-store');
+  res.send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escHtml(lead.restaurantName)} · Tuesday Club results</title><meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+</head><body style="margin:0;background:#fff6e6;color:#1d1640;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif">
+<header style="background:#5b2ee5;color:#fff1d6;padding:20px 16px"><div style="max-width:640px;margin:0 auto">
+<div style="font-weight:800;letter-spacing:.06em;font-size:14px">TUESDAY<span style="color:#ffc83d"> CLUB</span></div>
+${lead.logoFile ? `<img src="${logoUrl(lead)}" alt="${escHtml(lead.restaurantName)} logo" style="display:block;max-height:64px;max-width:200px;margin-top:12px;border-radius:10px;background:#fff;padding:6px">` : ''}
+<h1 style="font-weight:400;font-size:28px;margin:6px 0 2px">${escHtml(lead.restaurantName)}</h1>
+<p style="margin:0;opacity:.85">${members} ${members === 1 ? 'guest' : 'guests'} in your club · updated live</p></div></header>
+<main style="max-width:640px;margin:0 auto;padding:18px 16px 40px">
+<nav style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${tab('current', 'This month')}${tab('last', 'Last month')}
+<a href="${base}/guests.csv" style="padding:8px 14px;border-radius:999px;text-decoration:none;font-weight:700;background:#d81b6a;color:#fff">Download guest list</a></nav>
+${ownerDrawBox(db, lead)}
+${html}
+<p style="color:#5c5578;font-size:13px;margin-top:24px">This page is private to your restaurant. Don't share the link. Questions? Text or email Christopher.</p>
+</main></body></html>`);
+});
+
+// Why guests came in, per restaurant (from the check-in dropdown)
+app.get('/api/leads/:id/visit-stats', (req, res) => {
+  const db = readDB();
+  const counts = {};
+  Object.keys(VISIT_TYPES).forEach((k) => (counts[k] = 0));
+  db.visits.filter((v) => v.restaurantId === req.params.id && v.visitType).forEach((v) => counts[v.visitType]++);
+  res.json(Object.entries(counts).map(([key, count]) => ({ key, label: VISIT_TYPES[key], count })));
+});
+
+// Owner manually adding a customer from inside the CRM
+app.post('/api/leads/:id/customers', (req, res) => {
+  const db = readDB();
+  const restaurant = db.leads.find((l) => l.id === req.params.id);
+  if (!restaurant) return res.status(404).json({ error: 'Restaurant not found' });
+  const phone = normalizePhone(req.body.phone);
+  if (!phone) return res.status(400).json({ error: 'Valid phone number required' });
+  if (db.customers.some((c) => c.restaurantId === req.params.id && c.phone === phone)) {
+    return res.status(409).json({ error: 'That phone number is already a customer here' });
+  }
+  const now = new Date().toISOString();
+  const customer = {
+    id: crypto.randomUUID(),
+    restaurantId: req.params.id,
+    rewardId: nextRewardId(restaurant, db),
+    name: req.body.name || '',
+    phone,
+    email: normalizeEmail(req.body.email),
+    smsConsent: false, // added by staff: no texts until the guest opts in themselves
+    optedInAt: now,
+    optedOut: false,
+    redemptionCount: 0,
+    lastRedemptionAt: null,
+    followUpSentAt: null,
+    reviewRequestSentAt: null,
+  };
+  db.customers.unshift(customer);
+  writeDB(db);
+  res.status(201).json(customer);
+});
+
+// ---- Messaging: text when Twilio is set up, otherwise email (free) ----
+function publicBaseUrl() {
+  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/$/, '');
+  if (process.env.RAILWAY_PUBLIC_DOMAIN) return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+  return `http://localhost:${PORT}`;
+}
+
+// Minimum order to redeem: a whole-dollar amount, or null for no minimum.
+function cleanMoney(v) {
+  const n = Math.round(Number(String(v ?? '').replace(/[^0-9.]/g, '')));
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 500) : null;
+}
+
+function escHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Texts need: the restaurant's prepaid text add-on, the guest's own checkbox consent, and no STOP.
+function smsAllowed(c, restaurant) { return !!(restaurant && restaurant.smsEnabled) && c.smsConsent === true && !c.optedOut && !!c.phone; }
+function canText(c, restaurant) { return !SIMULATION_MODE && smsAllowed(c, restaurant); }
+// Email is separate from text consent: guests can decline texts and still get email (unsubscribe link in every one).
+function canEmail(c) { return !!c.email && !c.emailOptOut; }
+// Callers without the restaurant handy only check the guest's side; notifyGuest re-checks the restaurant's text add-on.
+function canMessage(c, restaurant) { return (restaurant ? smsAllowed(c, restaurant) : (c.smsConsent === true && !c.optedOut && !!c.phone)) || canEmail(c); }
+
+const SMS_CONSENT_TEXT = (name) => `Yes, text me rewards, reminders and offers from ${name}. Up to 4 msgs/month. Msg & data rates may apply. Reply STOP to cancel, HELP for help. Consent is not a condition of purchase.`;
+function recordSmsConsent(customer, restaurant, req) {
+  customer.smsConsent = true;
+  customer.optedOut = false;
+  customer.smsConsentAt = new Date().toISOString();
+  customer.smsConsentText = SMS_CONSENT_TEXT(restaurant.restaurantName);
+  customer.smsConsentSource = 'checkin_page_checkbox';
+  customer.smsConsentIp = String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim();
+}
+
+// Guest-facing email wrapper with the legally required unsubscribe link + mailing address (CAN-SPAM).
+function guestEmailHtml(restaurant, customer, bodyHtml) {
+  ensureDeviceToken(customer);
+  const unsub = `${publicBaseUrl()}/unsubscribe/${customer.deviceToken}`;
+  const address = process.env.BUSINESS_ADDRESS ? `<br>${escHtml(process.env.BUSINESS_ADDRESS)}` : '';
+  return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#1d1640">
+    <h2 style="margin:0 0 12px">${escHtml(restaurant.restaurantName)}</h2>
+    ${bodyHtml}
+    <p style="font-size:11px;color:#8a8175;margin-top:28px;border-top:1px solid #e6dccb;padding-top:10px">
+      You're getting this because you joined ${escHtml(restaurant.restaurantName)}'s Tuesday Club.
+      <a href="${unsub}" style="color:#8a8175">Unsubscribe</a>${address}</p></div>`;
+}
+
+function rewardIdBlock(customer) {
+  return `<p style="font-size:26px;font-weight:bold;letter-spacing:2px;font-family:monospace;margin:8px 0">${escHtml(customer.rewardId || '')}</p>`;
+}
+
+/**
+ * Sends one message to a guest by the best available channel and logs it.
+ * sms: text version; subject/html: email version (wrapped with unsubscribe footer).
+ */
+async function notifyGuest(db, restaurant, customer, type, { sms, subject, html, preferEmail }, extra = {}) {
+  let result = { status: 'skipped' };
+  let channel = 'none';
+  if (preferEmail && canEmail(customer)) {
+    channel = 'email';
+    result = await sendEmail({
+      to: customer.email, subject, fromName: restaurant.restaurantName,
+      html: guestEmailHtml(restaurant, customer, html),
+    });
+  } else if (canText(customer, restaurant)) {
+    channel = 'sms';
+    result = await sendSms(customer.phone, sms);
+  } else if (canEmail(customer)) {
+    channel = 'email';
+    result = await sendEmail({
+      to: customer.email, subject, fromName: restaurant.restaurantName,
+      html: guestEmailHtml(restaurant, customer, html),
+    });
+  } else if (smsAllowed(customer, restaurant)) {
+    channel = 'sms';
+    result = await sendSms(customer.phone, sms); // simulation mode: logged only
+  }
+  db.messages.unshift({
+    id: crypto.randomUUID(), restaurantId: restaurant.id, customerId: customer.id,
+    type, channel, body: sms, sentAt: new Date().toISOString(), status: result.status, ...extra,
+  });
+  return result;
+}
+
+// ---- PUBLIC API: called by the /checkin/:restaurantId page (QR / NFC) ----
+// No auth — this is the guest-facing capture endpoint.
+app.get('/api/public/restaurant/:id', (req, res) => {
+  const db = readDB();
+  const restaurant = db.leads.find((l) => l.id === req.params.id);
+  if (!restaurant) return res.status(404).json({ error: 'Restaurant not found' });
+  res.json({
+    id: restaurant.id,
+    restaurantName: restaurant.restaurantName,
+    currentOffer: restaurant.currentOffer,
+    slowestNight: restaurant.slowestNight,
+    smsEnabled: !!restaurant.smsEnabled,
+    minSpend: restaurant.minSpend || null,
+    minSpendBig: restaurant.minSpendBig || null,
+    logoUrl: logoUrl(restaurant),
+    window: windowInfo(restaurant),
+    draw: drawOn(restaurant) ? { cap: drawCap(restaurant), lastWinner: (lastDraw(db, restaurant.id) || {}).winnerName || '' } : null,
+  });
+});
+
+app.post('/api/public/checkin', rateLimit('checkin', 40, 10 * 60 * 1000), async (req, res) => {
+  const db = readDB();
+  const { restaurantId } = req.body;
+  const restaurant = db.leads.find((l) => l.id === restaurantId);
+  if (!restaurant) return res.status(404).json({ error: 'Restaurant not found' });
+  const visitType = cleanVisitType(req.body.visitType);
+
+  // A guest who already gave their info at ANOTHER restaurant can join with one tap:
+  // their phone saved token stands in for the form.
+  let name = req.body.name;
+  let phone = normalizePhone(req.body.phone);
+  let email = normalizeEmail(req.body.email);
+  if (req.body.token) {
+    const known = db.customers.find((c) => c.deviceToken && c.deviceToken === String(req.body.token));
+    if (known) { name = name || known.name; phone = phone || known.phone; email = email || known.email; }
+  }
+  if (!phone) return res.status(400).json({ error: 'Please enter a valid mobile number' });
+  if (req.body.email && !normalizeEmail(req.body.email)) return res.status(400).json({ error: 'Please enter a valid email' });
+  // Text consent is optional and separate (carrier + TCPA rules); only counts if this restaurant offers texts.
+  const wantsTexts = req.body.smsConsent === true && !!restaurant.smsEnabled;
+
+  // Same phone OR same email at this restaurant = same guest: no new ID, no double reward.
+  let customer = db.customers.find(
+    (c) => c.restaurantId === restaurantId && (c.phone === phone || (email && c.email === email))
+  );
+  const now = new Date().toISOString();
+  const isNewCustomer = !customer;
+  if (customer) {
+    customer.name = name || customer.name;
+    if (email && !customer.email) customer.email = email;
+    if (wantsTexts) recordSmsConsent(customer, restaurant, req);
+  } else {
+    customer = {
+      id: crypto.randomUUID(),
+      restaurantId,
+      rewardId: nextRewardId(restaurant, db),
+      name: name || '',
+      phone,
+      email,
+      smsConsent: false,
+      emailConsent: !!email,
+      consentAt: now,
+      optedInAt: now,
+      optedOut: false,
+      emailOptOut: false,
+      firstVisitType: visitType,
+      redemptionCount: 0,
+      lastRedemptionAt: null,
+      followUpSentAt: null,
+      reviewRequestSentAt: null,
+      firstVisitEmailSentAt: null,
+    };
+    if (wantsTexts) recordSmsConsent(customer, restaurant, req);
+    db.customers.unshift(customer);
+  }
+  ensureDeviceToken(customer);
+  const scan = processScan(db, restaurant, customer, logVisit(db, customer, visitType, 'form'));
+  writeDB(db);
+
+  // Welcome text with their Reward ID the moment a brand-new guest opts in.
+  if (isNewCustomer) {
+    const offer = restaurant.currentOffer ? `Your reward: ${restaurant.currentOffer}. ` : '';
+    await notifyGuest(db, restaurant, customer, 'welcome', {
+      sms: `Welcome to ${restaurant.restaurantName}'s Tuesday Club! ${offer}Rewards are good ${windowLabel(restaurant)}. Your member ID is ${customer.rewardId}. Every visit also enters you in the weekly free-meal draw. Reply STOP to opt out.`,
+      subject: `Welcome to ${restaurant.restaurantName}'s Tuesday Club! Here's your member ID`,
+      html: `<p>Thanks for joining${customer.name ? ', ' + escHtml(customer.name) : ''}!</p>
+        ${restaurant.currentOffer ? `<p>On your <b>next visit</b> you get: <b>${escHtml(restaurant.currentOffer)}</b></p>` : ''}
+        <p>Your rewards are good <b>${escHtml(windowLabel(restaurant))}</b>. Visit any night to earn them, then scan the tag at your table on a slow night and show your server the code.</p>
+        ${drawOn(restaurant) ? `<p>Every day you check in also enters you in the <b>weekly free-meal draw</b> (meal up to $${drawCap(restaurant)}). <a href="${publicBaseUrl()}/rules">Rules</a></p>` : ''}
+        <p>Your member ID:</p>${rewardIdBlock(customer)}`,
+    });
+    writeDB(db);
+  }
+
+  res.status(201).json({
+    customer: publicCustomer(customer),
+    token: customer.deviceToken,
+    status: passStatus(customer),
+    isNewCustomer,
+    scan,
+    progress: progressFor(db, restaurant, customer),
+    offer: restaurant.currentOffer,
+    restaurantName: restaurant.restaurantName,
+    window: windowInfo(restaurant),
+  });
+});
+
+// Returning guest: the check-in page sends the token saved on their phone, no form needed.
+app.post('/api/public/returning', rateLimit('returning', 60, 10 * 60 * 1000), (req, res) => {
+  const db = readDB();
+  const { restaurantId } = req.body;
+  const token = String(req.body.token || '');
+  const restaurant = db.leads.find((l) => l.id === restaurantId);
+  if (!restaurant) return res.status(404).json({ error: 'Restaurant not found' });
+  if (!token) return res.status(404).json({ error: 'unknown' });
+
+  // The token identifies the person; they may already be a member here under a different record.
+  const known = db.customers.find((c) => c.deviceToken === token);
+  if (!known) return res.status(404).json({ error: 'unknown' });
+  const here = known.restaurantId === restaurantId ? known
+    : db.customers.find((c) => c.restaurantId === restaurantId && c.phone === known.phone);
+  if (here) {
+    // Coming back on a new day = a regular, unless they pick something else in the dropdown.
+    const today = localDay(new Date());
+    const alreadyToday = db.visits.some((v) => v.customerId === here.id && v.day === today);
+    const visitType = cleanVisitType(req.body.visitType) || (alreadyToday ? '' : 'regular');
+    const scan = processScan(db, restaurant, here, logVisit(db, here, visitType, 'saved_phone'));
+    writeDB(db);
+    return res.json({
+      member: true,
+      scan,
+      progress: progressFor(db, restaurant, here),
+      customer: publicCustomer(here),
+      status: passStatus(here),
+      visitType: here.lastVisitType || '',
+      offer: restaurant.currentOffer,
+      restaurantName: restaurant.restaurantName,
+      window: windowInfo(restaurant),
+    });
+  }
+
+  // Known guest from another restaurant: offer one-tap join (they still tick consent for THIS place).
+  res.json({ member: false, knownGuest: true, name: known.name, phoneHint: maskPhone(known.phone) });
+});
+
+// Landing-page booking form -> becomes a New Lead in the CRM pipeline
+app.post('/api/public/book', rateLimit('book', 5, 60 * 60 * 1000), (req, res) => {
+  // Bots fill the hidden "website" field or submit instantly; pretend it worked so they don't retry.
+  const tooFast = Number(req.body.elapsedMs) > 0 && Number(req.body.elapsedMs) < 2500;
+  if (req.body.website || tooFast) return res.status(201).json({ ok: true });
+  const db = readDB();
+  const restaurantName = String(req.body.restaurantName || '').trim().slice(0, 120);
+  const phone = String(req.body.phone || '').trim().slice(0, 40);
+  const email = normalizeEmail(req.body.email);
+  const preferredTime = String(req.body.preferredTime || '').trim().slice(0, 40);
+  if (!restaurantName) return res.status(400).json({ error: 'Please add your restaurant name.' });
+  if (!phone && !email) return res.status(400).json({ error: 'Please add a phone number or email so we can confirm.' });
+  if (req.body.email && !email) return res.status(400).json({ error: 'Please enter a valid email.' });
+  let when = preferredTime;
+  const d = new Date(preferredTime);
+  if (preferredTime && !isNaN(d)) when = d.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+  const now = new Date().toISOString();
+  const lead = {
+    id: crypto.randomUUID(),
+    restaurantName,
+    contactName: '',
+    phone,
+    email,
+    slowestNight: '',
+    currentOffer: '',
+    googleReviewLink: '',
+    stage: STAGES[0],
+    liveSince: null,
+    notes: `Booked a meeting from the landing page. Preferred time: ${when || 'not given'}.`,
+    rewardCode: makeRewardCode(restaurantName, db.leads, null),
+    rewardCounter: 0,
+    staffPin: newStaffPin(),
+    source: 'landing-page',
+    preferredMeetingTime: preferredTime,
+    createdAt: now,
+    updatedAt: now,
+  };
+  db.leads.unshift(lead);
+  writeDB(db);
+  res.status(201).json({ ok: true });
+  notifyBooking(lead, when).catch((e) => console.error('Booking email failed:', e.message));
+});
+
+// Landing-page bookings: alert Christopher right away, and confirm to the owner if they left an email.
+// The alert address comes from BOOKING_ALERT_EMAIL in Railway, with Christopher's address as the default.
+async function notifyBooking(lead, when) {
+  const to = process.env.BOOKING_ALERT_EMAIL || 'wint_christopher@yahoo.com';
+  const crm = `${publicBaseUrl()}/`;
+  const row = (k, v) => `<tr><td style="padding:6px 12px 6px 0;color:#5c5578">${k}</td><td style="padding:6px 0"><b>${escHtml(v || 'not given')}</b></td></tr>`;
+  await sendEmail({
+    to,
+    fromName: 'Tuesday Club',
+    subject: `New meeting request: ${lead.restaurantName}`,
+    html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;color:#1d1640">
+      <h2 style="margin:0 0 6px">New meeting request</h2>
+      <p style="margin:0 0 14px;color:#5c5578">Someone booked from the Tuesday Club landing page.</p>
+      <table style="border-collapse:collapse;font-size:15px">
+        ${row('Restaurant', lead.restaurantName)}${row('Phone', lead.phone)}${row('Email', lead.email)}${row('Preferred time', when)}
+      </table>
+      <p style="margin:18px 0"><a href="${crm}" style="background:#d81b6a;color:#fff;text-decoration:none;padding:11px 20px;border-radius:999px;font-weight:bold">Open the CRM</a></p>
+      <p style="font-size:13px;color:#5c5578">They're in the "New Lead" column. Reply within the hour if you can.</p></div>`,
+  });
+  if (lead.email) {
+    await sendEmail({
+      to: lead.email,
+      fromName: 'Tuesday Club',
+      subject: `We got your request, ${lead.restaurantName}`,
+      html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;color:#1d1640">
+        <h2 style="margin:0 0 10px">Thanks, ${escHtml(lead.restaurantName)}!</h2>
+        <p>We got your request to meet${when ? ` on <b>${escHtml(when)}</b>` : ''}. Christopher will confirm the time with you shortly.</p>
+        <p>In the meeting, you'll see how a sticker on each table turns first-time guests into regulars, with no app and no tablet for your staff.</p>
+        <p style="color:#5c5578">Tuesday Club · Worcester, MA</p></div>`,
+    });
+  }
+}
+
+// Staff redeem: requires the restaurant's staff PIN + the guest's Reward ID.
+// A redemption counts as a RETURN visit, so it isn't allowed on the day they signed up,
+// and only once per guest per day.
+app.post('/api/public/redeem', rateLimit('redeem', 60, 10 * 60 * 1000), (req, res) => {
+  const db = readDB();
+  const { restaurantId } = req.body;
+  const restaurant = db.leads.find((l) => l.id === restaurantId);
+  if (!restaurant) return res.status(404).json({ error: 'Restaurant not found' });
+  ensureRewardFields(restaurant, db);
+  if (String(req.body.pin || '') !== restaurant.staffPin) {
+    return res.status(401).json({ error: 'Wrong staff PIN' });
+  }
+  const entered = String(req.body.rewardId || '').trim().toUpperCase().replace(/\s+/g, '');
+  const log = (result, customer) => {
+    db.redemptions.unshift({
+      id: crypto.randomUUID(), restaurantId, rewardIdEntered: entered, result,
+      customerId: customer ? customer.id : null, at: new Date().toISOString(),
+    });
+    writeDB(db);
+  };
+
+  const customer = db.customers.find((c) => c.restaurantId === restaurantId && c.rewardId === entered);
+  if (!customer) { log('invalid'); return res.status(404).json({ error: `No guest with Reward ID ${entered} at this restaurant` }); }
+
+  const today = localDay(new Date());
+  if (localDay(customer.optedInAt) === today) {
+    log('same_day');
+    return res.status(409).json({ error: 'Signed up today - the reward is for their NEXT visit.', customer: publicCustomer(customer) });
+  }
+  if (!inRedeemWindow(restaurant)) {
+    log('outside_window', customer);
+    return res.status(409).json({ error: `Rewards can only be used ${windowLabel(restaurant)}. The visit still counts on their phone.`, customer: publicCustomer(customer) });
+  }
+  if (customer.lastRedemptionAt && localDay(customer.lastRedemptionAt) === today) {
+    log('already_today');
+    return res.status(409).json({ error: 'Already redeemed today.', customer: publicCustomer(customer) });
+  }
+
+  customer.redemptionCount = (customer.redemptionCount || 0) + 1;
+  customer.lastRedemptionAt = new Date().toISOString();
+  log('valid', customer);
+  res.json({ ok: true, customer: publicCustomer(customer), offer: restaurant.currentOffer, visitNumber: customer.redemptionCount });
+});
+
+// Owner-side redemption log (CRM)
+app.get('/api/leads/:id/redemptions', (req, res) => {
+  const db = readDB();
+  res.json(db.redemptions.filter((r) => r.restaurantId === req.params.id).slice(0, 100));
+});
+
+// ---- API: send a promotion to this restaurant's customers ----
+app.post('/api/leads/:id/promotions', async (req, res) => {
+  const db = readDB();
+  const restaurant = db.leads.find((l) => l.id === req.params.id);
+  if (!restaurant) return res.status(404).json({ error: 'Restaurant not found' });
+
+  const { message, audience } = req.body; // audience: 'all' | 'new' | 'returning'
+  if (!message) return res.status(400).json({ error: 'Message is required' });
+
+  let recipients = db.customers.filter((c) => c.restaurantId === req.params.id && canMessage(c));
+  if (audience === 'new') recipients = recipients.filter((c) => (c.redemptionCount || 0) === 0);
+  if (audience === 'returning') recipients = recipients.filter((c) => (c.redemptionCount || 0) > 0);
+
+  const results = [];
+  for (const customer of recipients) {
+    const result = await notifyGuest(db, restaurant, customer, 'promotion_msg', {
+      sms: `${message} Reply STOP to opt out.`,
+      subject: `${restaurant.restaurantName}: ${message.slice(0, 60)}`,
+      html: `<p style="font-size:16px">${escHtml(message)}</p><p>Your Reward ID:</p>${rewardIdBlock(customer)}`,
+    });
+    results.push({ customerId: customer.id, phone: customer.phone, status: result.status });
+  }
+
+  const promotion = {
+    id: crypto.randomUUID(),
+    restaurantId: req.params.id,
+    message,
+    audience: audience || 'all',
+    recipientCount: recipients.length,
+    sentAt: new Date().toISOString(),
+  };
+  db.messages.unshift({ ...promotion, type: 'promotion' });
+  writeDB(db);
+
+  res.status(201).json({ promotion, results, simulated: SIMULATION_MODE });
+});
+
+app.get('/api/leads/:id/promotions', (req, res) => {
+  const db = readDB();
+  const promotions = db.messages
+    .filter((m) => m.restaurantId === req.params.id && m.type === 'promotion')
+    .sort((a, b) => new Date(b.sentAt) - new Date(a.sentAt));
+  res.json(promotions);
+});
+
+// ---- Twilio inbound webhook — handles STOP replies ----
+// Point your Twilio phone number's "A message comes in" webhook at:
+// https://<your-domain>/api/sms/inbound
+// Twilio's Advanced Opt-Out also replies to STOP/START/HELP automatically; we keep our records in sync.
+// Twilio signs every webhook with your auth token. Requests without a valid signature are ignored,
+// so nobody can fake a STOP and switch off a guest's texts.
+function validTwilioSignature(req) {
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  const sig = String(req.headers['x-twilio-signature'] || '');
+  if (!token || !sig) return false;
+  const url = publicBaseUrl() + (req.originalUrl || req.url);
+  const data = Object.keys(req.body || {}).sort().reduce((acc, k) => acc + k + req.body[k], url);
+  const expected = crypto.createHmac('sha1', token).update(Buffer.from(data, 'utf-8')).digest('base64');
+  return expected.length === sig.length && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig));
+}
+
+app.post('/api/sms/inbound', express.urlencoded({ extended: false }), (req, res) => {
+  if (!validTwilioSignature(req)) {
+    console.warn('Ignored /api/sms/inbound request without a valid Twilio signature');
+    return res.status(403).type('text/xml').send('<Response></Response>');
+  }
+  const from = normalizePhone(req.body.From);
+  const body = (req.body.Body || '').trim().toUpperCase();
+  const db = readDB();
+  const mine = from ? db.customers.filter((c) => c.phone === from) : [];
+  const restaurant = mine.length ? db.leads.find((l) => l.id === mine[0].restaurantId) : null;
+  const name = restaurant ? restaurant.restaurantName : 'Tuesday Club';
+  const now = new Date().toISOString();
+  let reply = '';
+  if (['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT', 'REVOKE', 'OPTOUT'].includes(body)) {
+    mine.forEach((c) => { c.optedOut = true; c.smsConsent = false; c.smsOptOutAt = now; });
+    writeDB(db);
+  } else if (['START', 'UNSTOP', 'YES'].includes(body)) {
+    // Only guests who ticked the box before can rejoin by text.
+    mine.filter((c) => c.smsConsentAt).forEach((c) => { c.optedOut = false; c.smsConsent = true; c.smsRejoinedAt = now; });
+    writeDB(db);
+  } else if (['HELP', 'INFO'].includes(body)) {
+    const contact = process.env.SUPPORT_CONTACT || 'reply here';
+    reply = `${name} Rewards: For help contact ${contact}. Msg & data rates may apply. Reply STOP to cancel.`;
+  }
+  res.set('Content-Type', 'text/xml');
+  res.send(reply ? `<Response><Message>${escHtml(reply)}</Message></Response>` : '<Response></Response>');
+});
+
+
+app.get('/api/analytics', (req, res) => {
+  const db = readDB();
+  const leads = db.leads;
+  const total = leads.length;
+
+  const byStage = {};
+  STAGES.forEach((s) => (byStage[s] = 0));
+  leads.forEach((l) => {
+    if (byStage[l.stage] === undefined) byStage[l.stage] = 0;
+    byStage[l.stage]++;
+  });
+
+  const liveClients = byStage['Live Client'] || 0;
+  const conversionRate = total > 0 ? Math.round((liveClients / total) * 1000) / 10 : 0;
+
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const newThisMonth = leads.filter((l) => new Date(l.createdAt).getTime() >= thirtyDaysAgo).length;
+  const dealsClosedThisMonth = leads.filter(
+    (l) => l.stage === 'Live Client' && new Date(l.updatedAt).getTime() >= thirtyDaysAgo
+  ).length;
+
+  const recent = [...leads]
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+    .slice(0, 5)
+    .map((l) => ({ id: l.id, restaurantName: l.restaurantName, stage: l.stage, updatedAt: l.updatedAt }));
+
+  const totalCustomers = db.customers.length;
+  const totalRedemptions = db.customers.reduce((sum, c) => sum + (c.redemptionCount || 0), 0);
+
+  res.json({
+    total,
+    byStage,
+    liveClients,
+    conversionRate,
+    newThisMonth,
+    dealsClosedThisMonth,
+    recent,
+    totalCustomers,
+    totalRedemptions,
+  });
+});
+
+// ---- Automated 48-hour follow-up ----
+// Every 15 minutes, check for customers who opted in ~48h ago and haven't
+// gotten their follow-up yet, then send it automatically.
+async function runFollowUpCheck() {
+  const db = readDB();
+  const cutoff = Date.now() - FOLLOWUP_DELAY_HOURS * 60 * 60 * 1000;
+  const due = db.customers.filter(
+    (c) => canMessage(c) && !c.followUpSentAt && !(c.redemptionCount > 0) &&
+      new Date(c.optedInAt).getTime() <= cutoff
+  );
+
+  for (const customer of due) {
+    const restaurant = db.leads.find((l) => l.id === customer.restaurantId);
+    if (!restaurant || !restaurant.currentOffer) continue;
+
+    await notifyGuest(db, restaurant, customer, 'followup', {
+      sms: `Still thinking about ${restaurant.restaurantName}? Your offer is waiting: ${restaurant.currentOffer}, good ${windowLabel(restaurant)}. Just scan the QR code at your table. Reply STOP to opt out.`,
+      subject: `Your reward at ${restaurant.restaurantName} is waiting`,
+      html: `<p>Your reward is still waiting: <b>${escHtml(restaurant.currentOffer)}</b></p><p>Come in <b>${escHtml(windowLabel(restaurant))}</b>, scan the QR code or tap the tag at your table, and show your server the reward code.</p>`,
+    });
+    customer.followUpSentAt = new Date().toISOString();
+  }
+
+  if (due.length > 0) writeDB(db);
+}
+
+// ---- First-visit thank-you (2 hours after a guest joins) ----
+// Emails (or texts, if no email) their Reward ID again plus the restaurant's Google review link.
+// Only for guests who joined in the last 2 days, so existing members aren't emailed all at once.
+async function runFirstVisitEmailCheck() {
+  const db = readDB();
+  const now = Date.now();
+  const cutoff = now - FIRST_VISIT_EMAIL_DELAY_HOURS * 60 * 60 * 1000;
+  const oldest = now - 48 * 60 * 60 * 1000;
+  const due = db.customers.filter((c) => {
+    const joined = new Date(c.optedInAt || 0).getTime();
+    return canMessage(c) && !c.firstVisitEmailSentAt && joined <= cutoff && joined >= oldest;
+  });
+  for (const customer of due) {
+    const restaurant = db.leads.find((l) => l.id === customer.restaurantId);
+    if (!restaurant) continue;
+    const link = restaurant.googleReviewLink;
+    const hi = customer.name ? `Hi ${escHtml(customer.name)}, thanks` : 'Thanks';
+    await notifyGuest(db, restaurant, customer, 'first_visit_followup', {
+      preferEmail: true,
+      sms: `Thanks for visiting ${restaurant.restaurantName}! Your reward${restaurant.currentOffer ? ` (${restaurant.currentOffer})` : ''} is good ${windowLabel(restaurant)}: scan the tag at your table.${link ? ` Enjoyed it? A quick Google review helps a lot: ${link}` : ''} Reply STOP to opt out.`,
+      subject: `Thanks for visiting ${restaurant.restaurantName}!`,
+      html: `<p>${hi} for coming in today!</p>
+        <p>Come back <b>${escHtml(windowLabel(restaurant))}</b> and scan the QR code or tap the tag at your table${restaurant.currentOffer ? ` to get <b>${escHtml(restaurant.currentOffer)}</b>` : ''}. Your phone will show a reward code for your server. Every check-in also enters you in the weekly free-meal draw.</p>
+        <p>Your member ID:</p>${rewardIdBlock(customer)}
+        ${link ? `<p style="margin-top:20px">Enjoyed your visit? A quick Google review helps a local restaurant more than you'd think:</p>
+        <p><a href="${escHtml(link)}" style="display:inline-block;background:#c67139;color:#fff;padding:12px 20px;border-radius:999px;text-decoration:none">Leave a Google review</a></p>` : ''}`,
+    }, { includesReview: !!link });
+    customer.firstVisitEmailSentAt = new Date().toISOString();
+  }
+  if (due.length > 0) writeDB(db);
+}
+
+// ---- Automated Google review request ----
+// Every 15 minutes, check for customers who redeemed ~2h ago (long enough to
+// have finished their meal and left) and haven't been asked for a review yet
+// for that visit, then text them the restaurant's Google review link.
+async function runReviewRequestCheck() {
+  const db = readDB();
+  const cutoff = Date.now() - REVIEW_REQUEST_DELAY_HOURS * 60 * 60 * 1000;
+  const due = db.customers.filter(
+    (c) =>
+      canMessage(c) &&
+      c.lastRedemptionAt &&
+      new Date(c.lastRedemptionAt).getTime() <= cutoff &&
+      (!c.reviewRequestSentAt || new Date(c.reviewRequestSentAt) < new Date(c.lastRedemptionAt))
+  );
+
+  for (const customer of due) {
+    const restaurant = db.leads.find((l) => l.id === customer.restaurantId);
+    if (!restaurant || !restaurant.googleReviewLink) continue;
+
+    await notifyGuest(db, restaurant, customer, 'review_request', {
+      sms: `Thanks for stopping by ${restaurant.restaurantName}! Mind leaving us a quick Google review? ${restaurant.googleReviewLink} Reply STOP to opt out.`,
+      subject: `Thanks for stopping by ${restaurant.restaurantName}!`,
+      html: `<p>Thanks for coming back! If you enjoyed it, a quick Google review helps a local restaurant a lot:</p>
+        <p><a href="${escHtml(restaurant.googleReviewLink)}" style="display:inline-block;background:#c67139;color:#fff;padding:12px 20px;border-radius:999px;text-decoration:none">Leave a review</a></p>`,
+    });
+    customer.reviewRequestSentAt = new Date().toISOString();
+  }
+
+  if (due.length > 0) writeDB(db);
+}
+
+// ---- Automated / scheduled promotions ----
+// Restaurant-level recurring promotions, e.g. "every Wednesday, text all
+// customers this message." Checked once a day per automation.
+app.get('/api/leads/:id/automations', (req, res) => {
+  const db = readDB();
+  res.json(db.automations.filter((a) => a.restaurantId === req.params.id));
+});
+
+app.post('/api/leads/:id/automations', (req, res) => {
+  const db = readDB();
+  const restaurant = db.leads.find((l) => l.id === req.params.id);
+  if (!restaurant) return res.status(404).json({ error: 'Restaurant not found' });
+  const { message, audience, dayOfWeek } = req.body;
+  if (!message || !DAY_NAMES.includes(dayOfWeek)) {
+    return res.status(400).json({ error: 'Message and a valid dayOfWeek are required' });
+  }
+  const automation = {
+    id: crypto.randomUUID(),
+    restaurantId: req.params.id,
+    message,
+    audience: audience || 'all',
+    dayOfWeek,
+    active: true,
+    lastSentAt: null,
+    createdAt: new Date().toISOString(),
+  };
+  db.automations.unshift(automation);
+  writeDB(db);
+  res.status(201).json(automation);
+});
+
+app.delete('/api/leads/:id/automations/:automationId', (req, res) => {
+  const db = readDB();
+  db.automations = db.automations.filter((a) => a.id !== req.params.automationId);
+  writeDB(db);
+  res.status(204).end();
+});
+
+async function runAutomationCheck() {
+  const db = readDB();
+  const now = new Date();
+  const today = now.toLocaleDateString('en-US', { weekday: 'long', timeZone: TIMEZONE });
+  const todayKey = localDay(now);
+
+  const due = db.automations.filter(
+    (a) => a.active && a.dayOfWeek === today && (!a.lastSentAt || localDay(a.lastSentAt) !== todayKey)
+  );
+
+  for (const automation of due) {
+    const restaurant = db.leads.find((l) => l.id === automation.restaurantId);
+    if (!restaurant) continue;
+    let recipients = db.customers.filter((c) => c.restaurantId === automation.restaurantId && canMessage(c));
+    if (automation.audience === 'new') recipients = recipients.filter((c) => (c.redemptionCount || 0) === 0);
+    if (automation.audience === 'returning') recipients = recipients.filter((c) => (c.redemptionCount || 0) > 0);
+
+    for (const customer of recipients) {
+      await notifyGuest(db, restaurant, customer, 'promotion', {
+        sms: `${automation.message} Reply STOP to opt out.`,
+        subject: `${restaurant.restaurantName}: ${automation.message.slice(0, 60)}`,
+        html: `<p style="font-size:16px">${escHtml(automation.message)}</p><p>Your Reward ID:</p>${rewardIdBlock(customer)}`,
+      }, { message: automation.message, audience: automation.audience, recipientCount: 1, automationId: automation.id });
+    }
+    automation.lastSentAt = new Date().toISOString();
+  }
+
+  if (due.length > 0) writeDB(db);
+}
+
+// =====================================================================
+// Monthly owner report — emailed on the 1st to every Live Client / Onboarding
+// restaurant with an email on file. Also previewable + sendable from the CRM.
+// =====================================================================
+const DEFAULT_AVG_CHECK = Number(process.env.DEFAULT_AVG_CHECK || 25);
+const REPORT_STAGES = ['Onboarding', 'Live Client'];
+
+function monthRange(which) {
+  // Returns {start, end, label, key} in the business timezone ("last" = previous calendar month).
+  const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: TIMEZONE }));
+  let y = nowLocal.getFullYear();
+  let m = nowLocal.getMonth();
+  if (which === 'last') { m -= 1; if (m < 0) { m = 11; y -= 1; } }
+  const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+  const label = new Date(y, m, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  return { key, label, inRange: (iso) => !!iso && localDay(iso).slice(0, 7) === key };
+}
+
+function buildOwnerReport(db, lead, which) {
+  const r = monthRange(which);
+  const customers = db.customers.filter((c) => c.restaurantId === lead.id);
+  const newSignups = customers.filter((c) => r.inRange(c.optedInAt)).length;
+  const checkins = db.visits.filter((v) => v.restaurantId === lead.id && r.inRange(v.at)).length;
+  const valid = db.redemptions.filter((x) => x.restaurantId === lead.id && x.result === 'valid' && r.inRange(x.at));
+  const returnVisits = valid.length;
+  const bonusPrizes = valid.filter((x) => x.bonusPrize).length;
+  const returningGuests = new Set(valid.map((x) => x.customerId)).size;
+  const avgCheck = Number(lead.avgCheck) > 0 ? Number(lead.avgCheck) : DEFAULT_AVG_CHECK;
+  const estRevenue = returnVisits * avgCheck;
+  const reasons = {};
+  db.visits.filter((v) => v.restaurantId === lead.id && v.visitType && r.inRange(v.at))
+    .forEach((v) => { reasons[v.visitType] = (reasons[v.visitType] || 0) + 1; });
+  const topReasons = Object.entries(reasons).sort((a, b) => b[1] - a[1])
+    .map(([k, n]) => `${VISIT_TYPES[k] || k}: ${n}`);
+  const firstTimeGuests = reasons.first_time || 0;
+  const regularVisits = reasons.regular || 0;
+  const messagesSent = db.messages.filter((m) => m.restaurantId === lead.id && m.customerId && r.inRange(m.sentAt)).length;
+  const reviewAsks = db.messages.filter((m) => m.restaurantId === lead.id && (m.type === 'review_request' || m.includesReview) && r.inRange(m.sentAt)).length;
+  const freeMeals = valid.filter((x) => x.freeMeal).length;
+  const draws = db.draws.filter((d) => d.restaurantId === lead.id && r.inRange(d.drawnAt));
+  const drawEntries = draws.reduce((a, d) => a + (d.entries || 0), 0);
+  const savedVisits = db.visits.filter((v) => v.restaurantId === lead.id && v.scanStatus === 'saved' && r.inRange(v.at)).length;
+  const stats = { month: r.label, totalMembers: customers.length, newSignups, checkins, returnVisits, returningGuests,
+                  avgCheck, estRevenue, messagesSent, reviewAsks, topReasons, firstTimeGuests, regularVisits, bonusPrizes,
+                  freeMeals, drawEntries, savedVisits, window: windowLabel(lead) };
+
+  const row = (label, value) => `<tr><td style="padding:8px 0;color:#5c5578">${label}</td><td style="padding:8px 0;text-align:right;font-weight:bold">${value}</td></tr>`;
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;color:#1d1640">
+    <p style="color:#d81b6a;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin:0">Tuesday Club monthly report</p>
+    <h2 style="margin:4px 0 4px">${escHtml(lead.restaurantName)}</h2>
+    <p style="margin:0 0 18px;color:#5c5578">${escHtml(r.label)}</p>
+    <div style="background:#fff1d6;border-radius:16px;padding:18px;margin-bottom:18px">
+      <p style="margin:0;color:#5c5578">Estimated slow-night revenue (${escHtml(windowLabel(lead))})</p>
+      <p style="margin:4px 0 0;font-size:34px;font-weight:bold">$${estRevenue.toLocaleString('en-US')}</p>
+      <p style="margin:4px 0 0;font-size:12px;color:#5c5578">${returnVisits} slow-night reward visits × $${avgCheck} average check</p>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:15px">
+      ${row('New members this month', newSignups)}
+      ${row('Total club members', customers.length)}
+      ${row('Check-ins (scans)', checkins)}
+      ${row('First-time guests', firstTimeGuests)}
+      ${row('Visits from regulars', regularVisits)}
+      ${row('Busy-night visits that earned a slow-night reward', savedVisits)}
+      ${row('Slow-night visits (rewards used)', returnVisits)}
+      ${row('Different guests who came back', returningGuests)}
+      ${row('Bonus prizes used (streaks and milestones)', bonusPrizes)}
+      ${row('Free-meal draw entries', drawEntries)}
+      ${row('Free meals claimed', freeMeals)}
+      ${row('Messages sent to your guests', messagesSent)}
+      ${row('Google review requests sent', reviewAsks)}
+    </table>
+    ${topReasons.length ? `<p style="margin-top:18px"><b>Why guests came in:</b> ${escHtml(topReasons.join(' · '))}</p>` : ''}
+    <p style="margin-top:22px;color:#5c5578;font-size:13px">Questions or want to change your offer? Just reply to this email.<br>— Christopher, Tuesday Club</p>
+  </div>`;
+  return { stats, html, subject: `${lead.restaurantName}: your Tuesday Club results for ${r.label}`, monthKey: r.key };
+}
+
+async function sendOwnerReport(db, lead, which) {
+  const report = buildOwnerReport(db, lead, which);
+  if (!lead.email) return { status: 'no_email', report };
+  ensureOwnerToken(lead);
+  const html = report.html + `<p style="font-family:Arial,sans-serif;max-width:560px;margin:16px auto 0"><a href="${ownerUrl(lead)}" style="background:#d81b6a;color:#fff;text-decoration:none;padding:11px 20px;border-radius:999px;font-weight:bold">See your live results anytime</a></p>`;
+  const result = await sendEmail({ to: lead.email, subject: report.subject, html, fromName: 'Tuesday Club' });
+  if (process.env.REPORT_COPY_TO) {
+    await sendEmail({ to: process.env.REPORT_COPY_TO, subject: `[copy] ${report.subject}`, html, fromName: 'Tuesday Club' });
+  }
+  db.messages.unshift({ id: crypto.randomUUID(), restaurantId: lead.id, type: 'owner_report', channel: 'email',
+                        body: report.subject, sentAt: new Date().toISOString(), status: result.status });
+  if (which === 'last') lead.lastReportMonth = report.monthKey;
+  return { status: result.status, report };
+}
+
+// CRM: preview (opens as a web page) — ?period=current (default) or last
+app.get('/api/leads/:id/report', (req, res) => {
+  const db = readDB();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).send('Not found');
+  const { html } = buildOwnerReport(db, lead, req.query.period === 'last' ? 'last' : 'current');
+  res.send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="background:#fff6e6;padding:24px">${html}</body>`);
+});
+
+// CRM: send now
+app.post('/api/leads/:id/report/send', async (req, res) => {
+  const db = readDB();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).json({ error: 'Not found' });
+  if (!lead.email) return res.status(400).json({ error: 'Add the owner\'s email to this restaurant first.' });
+  const which = req.body.period === 'last' ? 'last' : 'current';
+  const { status, report } = await sendOwnerReport(db, lead, which);
+  writeDB(db);
+  res.json({ status, to: lead.email, stats: report.stats, simulated: EMAIL_SIMULATION });
+});
+
+// ---- Streak reminders ----
+// Thursdays after 11am: guests on a 2+ week streak who haven't been in this week get one nudge.
+async function runStreakReminders() {
+  const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: TIMEZONE }));
+  if (nowLocal.getDay() !== 4 || nowLocal.getHours() < 11) return;
+  const db = readDB();
+  let sent = 0;
+  for (const customer of db.customers) {
+    if (!canMessage(customer)) continue;
+    const s = streakFor(db, customer);
+    if (!s.atRisk || s.weeks < 2 || customer.streakReminderWeek === s.thisWeek) continue;
+    const restaurant = db.leads.find((l) => l.id === customer.restaurantId);
+    if (!restaurant) continue;
+    const next = s.weeks + 1;
+    const nextPrize = STREAK_BADGES.includes(next) ? prizeFor(restaurant, `streak${next}`) : '';
+    const unlock = nextPrize ? ` Week ${next} unlocks: ${nextPrize}!` : '';
+    await notifyGuest(db, restaurant, customer, 'streak_reminder', {
+      preferEmail: true,
+      sms: `Your ${s.weeks}-week streak at ${restaurant.restaurantName} ends Sunday. Stop in this week to keep it alive.${unlock} Reply STOP to opt out.`,
+      subject: `Keep your ${s.weeks}-week streak alive at ${restaurant.restaurantName}`,
+      html: `<p style="font-size:40px;font-weight:bold;margin:0">${s.weeks}</p><p style="margin:0 0 12px">week streak</p>
+        <p>You've been in ${s.weeks} weeks in a row. Stop by before Sunday to keep your streak alive.${unlock ? `<br><b>${escHtml(unlock.trim())}</b>` : ''}</p>
+        <p>Just scan the QR code or tap the tag at your table when you come in.</p>`,
+    });
+    customer.streakReminderWeek = s.thisWeek;
+    sent += 1;
+  }
+  if (sent) writeDB(db);
+}
+
+// ---- Weekly free-meal draw (runs from Monday 9am for last week; catches up if the server was down) ----
+async function runWeeklyDraws(onlyRestaurantId) {
+  const p = localParts(new Date());
+  if (!onlyRestaurantId && p.dow === 1 && p.minutes < 9 * 60) return;
+  const thisWeek = weekStart(localDay(new Date()));
+  const lastWk = weeksBefore(thisWeek, 1);
+  const db = readDB();
+  const done = [];
+  for (const r of db.leads) {
+    if (onlyRestaurantId ? r.id !== onlyRestaurantId : r.stage !== 'Live Client') continue;
+    if (!drawOn(r) || db.draws.some((d) => d.restaurantId === r.id && d.week === lastWk)) continue;
+    const entries = weekEntries(db, r.id, lastWk);
+    const total = [...entries.values()].reduce((a, b) => a + b, 0);
+    const now = new Date().toISOString();
+    const draw = { id: crypto.randomUUID(), restaurantId: r.id, week: lastWk, entries: total, players: entries.size,
+                   cap: drawCap(r), drawnAt: now, winnerId: null, winnerName: '', claimedAt: null,
+                   expiresAt: new Date(Date.now() + BANK_DAYS * 86400000).toISOString() };
+    let winner = null;
+    if (total) {
+      let pick = crypto.randomInt(total);
+      for (const [cid, n] of entries) { if (pick < n) { draw.winnerId = cid; break; } pick -= n; }
+      winner = db.customers.find((c) => c.id === draw.winnerId) || null;
+      if (winner) {
+        draw.winnerName = shortName(winner);
+        activeBank(winner).push(bankItem('meal', `Free meal up to $${draw.cap}`, { drawId: draw.id, expiresAt: draw.expiresAt }));
+      }
+    }
+    db.draws.unshift(draw);
+    done.push({ r, draw, winner });
+  }
+  if (!done.length) return [];
+  writeDB(db);
+  for (const { r, draw, winner } of done) {
+    const when = windowLabel(r);
+    if (winner) {
+      await notifyGuest(db, r, winner, 'draw_win', {
+        sms: `You won this week's Tuesday Club free-meal draw at ${r.restaurantName}! Your meal (up to $${draw.cap}) is on us. Come in ${when} within 30 days and scan the tag at your table to claim it. Reply STOP to opt out.`,
+        subject: `You won a free meal at ${r.restaurantName}!`,
+        html: `<p style="font-size:30px;font-weight:bold;margin:0 0 6px">You won! 🎉</p>
+          <p>Your name was drawn in this week's Tuesday Club free-meal draw at <b>${escHtml(r.restaurantName)}</b>.</p>
+          <p style="font-size:18px"><b>Your meal is on us, up to $${draw.cap}.</b></p>
+          <p>To claim it, come in <b>${escHtml(when)}</b> within the next 30 days and scan the tag at your table. Your phone will show a <b>FREE MEAL</b> code for your server.</p>`,
+      }, { drawId: draw.id });
+    }
+    if (r.email) {
+      const wkLabel = new Date(`${draw.week}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+      await sendEmail({
+        to: r.email, fromName: 'Tuesday Club',
+        subject: winner ? `This week's free-meal winner at ${r.restaurantName}: ${draw.winnerName}` : `No free-meal winner this week at ${r.restaurantName}`,
+        html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;color:#1d1640">
+          <p style="color:#d81b6a;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin:0">Tuesday Club weekly draw</p>
+          <h2 style="margin:4px 0 12px">${escHtml(r.restaurantName)} · week of ${wkLabel}</h2>
+          ${winner ? `<p><b>${escHtml(draw.winnerName)}</b> won a free meal up to <b>$${draw.cap}</b>.</p>
+          <p>${draw.entries} ${draw.entries === 1 ? 'entry' : 'entries'} from ${draw.players} ${draw.players === 1 ? 'guest' : 'guests'} last week.</p>
+          <p>They can claim it ${escHtml(when)} within 30 days. Their phone will show a purple <b>FREE MEAL</b> screen with a code starting with <b>W</b>. Comp their meal up to $${draw.cap}; anything over that, they pay.</p>`
+          : '<p>Nobody checked in last week, so there was no winner. The draw runs again next Monday.</p>'}
+          <p style="color:#5c5578;font-size:13px">— Christopher, Tuesday Club</p></div>`,
+      });
+    }
+  }
+  writeDB(db);
+  return done.map((d) => d.draw);
+}
+
+// CRM: draw history, and a "draw now" button for testing or a missed week
+app.get('/api/leads/:id/draws', (req, res) => {
+  const db = readDB();
+  const list = db.draws.filter((d) => d.restaurantId === req.params.id).slice(0, 12);
+  const wk = weekStart(localDay(new Date()));
+  const entries = weekEntries(db, req.params.id, wk);
+  res.json({ thisWeek: { entries: [...entries.values()].reduce((a, b) => a + b, 0), players: entries.size }, draws: list });
+});
+app.post('/api/leads/:id/draws/run', async (req, res) => {
+  const ran = await runWeeklyDraws(req.params.id);
+  if (!ran || !ran.length) return res.status(409).json({ error: "Last week's draw for this restaurant already ran (or the draw is turned off)." });
+  res.json(ran[0]);
+});
+
+async function runMonthlyReports() {
+  const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: TIMEZONE }));
+  if (nowLocal.getDate() !== 1 || nowLocal.getHours() < 9) return;
+  const db = readDB();
+  const lastKey = monthRange('last').key;
+  let changed = false;
+  for (const lead of db.leads) {
+    if (!REPORT_STAGES.includes(lead.stage) || !lead.email || lead.lastReportMonth === lastKey) continue;
+    await sendOwnerReport(db, lead, 'last');
+    changed = true;
+  }
+  if (changed) writeDB(db);
+}
+
+// =====================================================================
+// Backups — a dated copy kept on the volume every day (last 14), emailed to
+// BACKUP_EMAIL if set, plus a one-click download from the CRM.
+// =====================================================================
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const BACKUPS_TO_KEEP = 14;
+
+app.get('/api/backup', (req, res) => {
+  const db = readDB();
+  res.set('Content-Disposition', `attachment; filename="tuesdayclub-backup-${localDay(new Date())}.json"`);
+  res.json(db);
+});
+
+async function runDailyBackup(force) {
+  const today = localDay(new Date());
+  const file = path.join(BACKUP_DIR, `db-${today}.json`);
+  if (!force && fs.existsSync(file)) return;
+  const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: TIMEZONE }));
+  if (!force && nowLocal.getHours() < 3) return; // run once a day, after 3am
+  if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  const raw = fs.existsSync(DB_PATH) ? fs.readFileSync(DB_PATH) : Buffer.from('{}');
+  fs.writeFileSync(file, raw);
+  fs.readdirSync(BACKUP_DIR).filter((f) => f.startsWith('db-')).sort().reverse()
+    .slice(BACKUPS_TO_KEEP).forEach((f) => fs.unlinkSync(path.join(BACKUP_DIR, f)));
+  if (process.env.BACKUP_EMAIL) {
+    const db = JSON.parse(raw.toString() || '{}');
+    await sendEmail({
+      to: process.env.BACKUP_EMAIL,
+      subject: `Tuesday Club backup ${today} (${(db.leads || []).length} restaurants, ${(db.customers || []).length} guests)`,
+      html: '<p>Your daily Tuesday Club CRM backup is attached. Keep this email: it can rebuild everything if the server data is ever lost.</p>',
+      attachments: [{ filename: `tuesdayclub-backup-${today}.json`, content: raw.toString('base64') }],
+    });
+  }
+  console.log(`Backup saved: ${file}`);
+}
+
+async function runScheduledJobs() {
+  for (const job of [runFollowUpCheck, runFirstVisitEmailCheck, runStreakReminders, runReviewRequestCheck, runAutomationCheck, runWeeklyDraws, runMonthlyReports, runDailyBackup]) {
+    try { await job(); } catch (err) { console.error(`Scheduled job ${job.name} failed:`, err.message); }
+  }
+}
+setInterval(runScheduledJobs, 15 * 60 * 1000);
+runScheduledJobs();
+
+// ---- Custom 404 (must stay after every route) ----
+app.use((req, res) => {
+  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
+  res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  const modes = [];
+  if (SIMULATION_MODE) modes.push('SMS simulation mode — no Twilio credentials set');
+  if (EMAIL_SIMULATION) modes.push('email simulation mode — no email API key set');
+  console.log(`Tuesday Club CRM running on port ${PORT}${modes.length ? ` (${modes.join('; ')})` : ''}`);
+});
