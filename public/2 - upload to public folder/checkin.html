@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Join the club · Tuesday Club</title>
+<meta name="description" content="Tap or scan at your table to join this restaurant's Tuesday Club: earn rewards any night, use them on slow nights, and win a free meal in the weekly draw.">
+<meta name="robots" content="noindex">
+<meta property="og:title" content="Join the club · Tuesday Club">
+<meta property="og:description" content="Earn rewards any night, cash them in on slow nights, and win a free meal every week. No app needed.">
+<meta property="og:image" content="__BASE_URL__/media/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#5b2ee5">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --grape: #5b2ee5; --grape-deep: #3d1aa8; --pink: #ff4d94; --pink-deep: #d81b6a; --sun: #ffc83d;
+    --teal: #0b8a74; --mint: #1fd1b0; --sky: #1f6fd1; --tangerine: #ff7a2f;
+    --cream: #fff6e6; --paper: #ffffff; --ink: #1d1640; --muted: #5c5578; --line: #ece4f7;
+    --font: "Poppins", "Helvetica Neue", Arial, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--cream); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; min-height: 100vh; }
+  h1, h2, p { margin: 0; }
+  button, input, select { font: inherit; }
+  :focus-visible { outline: 3px solid var(--pink); outline-offset: 2px; }
+  .hidden { display: none !important; }
+  .wrap { width: 100%; max-width: 440px; margin: 0 auto; padding: 0 16px; }
+
+  /* hero */
+  .hero { background: var(--grape); color: #fff; position: relative; overflow: hidden; isolation: isolate; text-align: center; padding: 26px 0 84px; }
+  .hero::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: .9;
+    background:
+      radial-gradient(circle at 12% 22%, var(--sun) 0 7px, transparent 8px),
+      radial-gradient(circle at 86% 16%, var(--pink) 0 11px, transparent 12px),
+      radial-gradient(circle at 78% 70%, var(--mint) 0 6px, transparent 7px),
+      radial-gradient(circle at 20% 80%, var(--tangerine) 0 9px, transparent 10px),
+      radial-gradient(circle at 50% 8%, #fff 0 3px, transparent 4px),
+      radial-gradient(circle at 94% 48%, var(--sun) 0 4px, transparent 5px); }
+  .hero::after { content: ""; position: absolute; width: 300px; height: 300px; border-radius: 50%; background: var(--grape-deep); right: -110px; bottom: -170px; z-index: -1; }
+  .brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; letter-spacing: .02em; background: rgba(255,255,255,.14); padding: 6px 14px 6px 8px; border-radius: 999px; margin-bottom: 18px; }
+  .brand .star { width: 22px; height: 22px; border-radius: 7px; background: var(--sun); display: flex; align-items: center; justify-content: center; }
+  .rest-logo { display: block; margin: 0 auto 14px; max-height: 80px; max-width: 180px; object-fit: contain; border-radius: 18px; background: #fff; padding: 8px; box-shadow: 0 8px 20px rgba(29,22,64,.25); }
+  .kicker { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--sun); }
+  .hero h1 { font-size: 34px; font-weight: 800; line-height: 1.1; margin-top: 4px; text-wrap: balance; }
+
+  main.wrap { margin-top: -62px; position: relative; padding-bottom: 40px; }
+  .card { background: var(--paper); border-radius: 28px; padding: 22px; box-shadow: 0 12px 30px rgba(61,26,168,.10); border: 1px solid var(--line); }
+  .stack > * + * { margin-top: 14px; }
+
+  /* slow-night window */
+  .window { background: var(--ink); color: #fff; border-radius: 24px; padding: 16px 18px; display: flex; align-items: center; gap: 14px; box-shadow: 0 14px 30px rgba(29,22,64,.25); }
+  .window .moon { width: 46px; height: 46px; border-radius: 15px; background: var(--sun); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .window small { display: block; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--mint); }
+  .window b { display: block; font-size: 17px; font-weight: 800; line-height: 1.2; }
+  .window .count { font-family: var(--mono); font-size: 13px; color: #d7d0f3; }
+  .window.open .moon { background: var(--mint); }
+
+  /* offer */
+  .offer { background: var(--pink-deep); color: #fff; border-radius: 28px; padding: 22px; position: relative; overflow: hidden; }
+  .offer::after { content: ""; position: absolute; width: 130px; height: 130px; border-radius: 50%; background: var(--pink); right: -40px; top: -50px; opacity: .7; }
+  .offer > * { position: relative; z-index: 1; }
+  .offer small { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #ffe1ee; }
+  .offer h2 { font-size: 26px; font-weight: 800; line-height: 1.15; margin: 4px 0 8px; }
+  .offer p { color: #ffeef5; font-size: 14px; }
+
+  /* draw */
+  .draw { background: #ffe3ef; border: 2px solid #ffc2da; color: var(--ink); border-radius: 24px; padding: 16px 18px; display: flex; gap: 14px; align-items: center; }
+  .draw .plate { width: 50px; height: 50px; border-radius: 50%; background: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: inset 0 0 0 5px rgba(29,22,64,.08); }
+  .draw b { display: block; font-size: 16px; font-weight: 800; line-height: 1.2; }
+  .draw p { font-size: 13px; }
+  .draw a { color: var(--ink); font-weight: 700; }
+
+  /* form */
+  label.lbl { display: block; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .field { width: 100%; background: #faf7ff; border: 2px solid var(--line); border-radius: 999px; padding: 12px 18px; color: var(--ink); margin-bottom: 14px; font-size: 16px; -webkit-appearance: none; appearance: none; }
+  .field:focus { outline: none; border-color: var(--grape); background: #fff; }
+  select.field { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235b2ee5' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 18px center; }
+  .consent { display: flex; gap: 10px; align-items: flex-start; font-size: 12px; color: var(--muted); margin-bottom: 14px; cursor: pointer; }
+  .consent input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--grape); flex-shrink: 0; }
+  .btn { display: block; width: 100%; border: 0; border-radius: 999px; padding: 15px 20px; background: var(--grape); color: #fff; font-weight: 800; font-size: 17px; cursor: pointer; box-shadow: 0 6px 0 var(--grape-deep); transition: transform .1s, box-shadow .1s; }
+  .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--grape-deep); }
+  .btn:disabled { opacity: .7; }
+  .err { color: var(--pink-deep); font-size: 13px; text-align: center; margin-top: 10px; font-weight: 600; }
+  .ok { color: var(--teal); font-size: 13px; text-align: center; margin-bottom: 8px; font-weight: 600; }
+  .fine { font-size: 11px; color: var(--muted); text-align: center; margin-top: 12px; }
+  .fine a, .link { color: var(--grape); }
+  .link { background: none; border: 0; text-decoration: underline; font-size: 12px; cursor: pointer; display: block; margin: 12px auto 0; }
+
+  /* pass */
+  .step { display: none; }
+  .step.active { display: block; }
+  .pass { border-radius: 30px; padding: 24px 20px; text-align: center; color: #fff; position: relative; overflow: hidden; box-shadow: 0 18px 38px rgba(29,22,64,.28); }
+  .pass .head { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; opacity: .92; }
+  .pass .label { font-size: 38px; font-weight: 800; line-height: 1.05; margin: 2px 0 4px; letter-spacing: -.01em; }
+  .pass .sub { font-size: 14px; opacity: .95; margin-bottom: 16px; }
+  .pass .codecap { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; opacity: .9; }
+  .pass .code { font-family: var(--mono); font-weight: 600; font-size: 54px; letter-spacing: .04em; line-height: 1.1; margin-bottom: 6px; }
+  .pass .clock { display: flex; align-items: center; justify-content: center; gap: 8px; font-family: var(--mono); font-size: 17px; }
+  .pass .date { font-size: 12px; opacity: .9; margin: 2px 0 16px; }
+  .pass .what { font-size: 20px; font-weight: 800; line-height: 1.25; background: rgba(255,255,255,.17); border-radius: 18px; padding: 12px 14px; }
+  .live-dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { transform: scale(1.6); opacity: .4; } }
+  .s-reward { background: var(--teal); }
+  .s-new { background: var(--sky); }
+  .s-used { background: #6b6680; }
+  .s-bonus { background: var(--pink-deep); background-image: radial-gradient(circle at 15% 10%, rgba(255,200,61,.55), transparent 55%); }
+  .s-meal { background: var(--grape); background-image: radial-gradient(circle at 15% 12%, var(--sun) 0 5px, transparent 6px), radial-gradient(circle at 85% 20%, var(--pink) 0 8px, transparent 9px), radial-gradient(circle at 80% 85%, var(--mint) 0 6px, transparent 7px), radial-gradient(circle at 25% 80%, rgba(255,200,61,.5), transparent 50%); }
+  .s-saved { background: var(--sun); color: var(--ink); }
+  .s-saved .what { background: rgba(29,22,64,.08); }
+
+  .bank { background: #fff; border: 2px dashed var(--sun); border-radius: 22px; padding: 14px 16px; }
+  .bank small { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .bank ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+  .bank li { display: flex; justify-content: space-between; gap: 10px; font-weight: 700; }
+  .bank li span { font-weight: 500; font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+  /* streak + badges */
+  .progress { background: var(--ink); color: #fff; border-radius: 30px; padding: 22px; }
+  .progress small.cap { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--mint); }
+  .streak-row { display: flex; justify-content: space-between; align-items: flex-end; }
+  .streak-num { font-size: 58px; font-weight: 800; line-height: 1; }
+  .weeks { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin-top: 18px; text-align: center; }
+  .weeks span.l { display: block; font-size: 10px; color: #a9a2c9; margin-bottom: 6px; }
+  .weeks span.l.cur { color: var(--sun); font-weight: 700; }
+  .wk-dot { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; background: rgba(255,255,255,.1); }
+  .wk-dot.on { background: var(--pink); }
+  .streak-msg { font-size: 13px; color: #d7d0f3; text-align: center; margin-top: 14px; }
+  .next { background: rgba(255,255,255,.08); border-radius: 18px; padding: 14px; margin-top: 16px; }
+  .next b { display: block; font-size: 21px; font-weight: 800; color: var(--sun); }
+  .bar { height: 10px; border-radius: 99px; background: rgba(255,255,255,.14); margin-top: 10px; overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: 99px; background: var(--mint); }
+  .badges { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 8px; text-align: center; margin-top: 10px; }
+  .badge .ring { width: 58px; height: 58px; border-radius: 20px; margin: 0 auto 6px; display: flex; align-items: center; justify-content: center; transform: rotate(-6deg); }
+  .badge .ring > div { width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; }
+  .badge b { display: block; font-size: 12px; }
+  .badge span { display: block; font-size: 10px; line-height: 1.2; color: var(--sun); }
+  .badge.off b, .badge.off span { color: #8e87ad; }
+
+  .member { text-align: center; }
+  .member .num { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .member .id { font-family: var(--mono); font-weight: 600; color: var(--ink); }
+  .divider { border-top: 1px solid var(--line); margin: 18px 0; }
+
+  .foot { text-align: center; font-size: 12px; color: var(--muted); margin-top: 28px; }
+  .foot b { color: var(--grape); font-weight: 800; }
+  .foot a { color: var(--muted); }
+
+  /* celebration */
+  .modal { position: fixed; inset: 0; z-index: 50; background: rgba(29,22,64,.82); display: flex; align-items: flex-end; justify-content: center; padding: 16px; }
+  @media (min-width: 520px) { .modal { align-items: center; } }
+  .modal .box { background: var(--ink); color: #fff; border-radius: 30px; width: 100%; max-width: 380px; padding: 30px 24px; text-align: center; animation: rise .45s cubic-bezier(.2,.9,.3,1.2); }
+  .big-badge { width: 130px; height: 130px; border-radius: 40px; margin: 0 auto; display: flex; align-items: center; justify-content: center; transform: rotate(-6deg); }
+  .big-badge > div { width: 98px; height: 98px; border-radius: 30px; display: flex; align-items: center; justify-content: center; }
+  .modal h2 { font-size: 34px; font-weight: 800; margin-top: 4px; }
+  .modal .body { color: #d7d0f3; margin-top: 8px; }
+  .modal .won { background: var(--sun); color: var(--ink); border-radius: 18px; padding: 12px 14px; margin-top: 18px; }
+  .modal .won small { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+  .modal .won b { display: block; font-size: 22px; font-weight: 800; }
+  .modal .btn { margin-top: 22px; background: var(--pink-deep); box-shadow: 0 6px 0 #8f0f43; }
+  @keyframes rise { from { transform: translateY(24px) scale(.9); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes pop { from { transform: scale(.75); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .pop-in { animation: pop .35s ease-out; }
+  @media (prefers-reduced-motion: reduce) { .pop-in, .live-dot, .modal .box { animation: none; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="brand"><span class="star"><svg width="14" height="14" viewBox="0 0 24 24" fill="#5b2ee5" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg></span>Tuesday Club</span>
+    <img id="restaurant-logo" alt="" class="rest-logo hidden">
+    <p class="kicker">You're in the club at</p>
+    <h1 id="restaurant-name">Loading…</h1>
+  </div>
+</header>
+
+<main class="wrap stack">
+
+  <div id="window-box" class="window hidden" aria-live="polite">
+    <div class="moon"><svg width="24" height="24" viewBox="0 0 24 24" fill="#1d1640" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></div>
+    <div>
+      <small id="window-cap">Slow-night rewards</small>
+      <b id="window-label">—</b>
+      <span id="window-count" class="count"></span>
+    </div>
+  </div>
+
+  <!-- STEP 1: OFFER + JOIN -->
+  <div id="step-1" class="step active stack">
+    <div class="offer">
+      <small>Your club reward</small>
+      <h2 id="offer-text">—</h2>
+      <p id="offer-note">Join tonight, earn on any visit, and cash it in on a slow night.</p>
+    </div>
+
+    <div id="draw-box" class="draw hidden">
+      <div class="plate"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#d81b6a" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 3v8a2 2 0 0 0 2 2v8M9 3v8a2 2 0 0 1-2 2M7 3v6M17 21V3c-2 1-3 4-3 7s1 4 3 4"/></svg></div>
+      <div>
+        <b id="draw-title">Win your whole meal free</b>
+        <p id="draw-text">Every check-in is an entry in this week's draw.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <label for="visit-input" class="lbl">Is this your first time here?</label>
+      <select id="visit-input" class="field">
+        <option value="" disabled selected>Choose one…</option>
+        <option value="first_time">First time here</option>
+        <option value="regular">I'm a regular</option>
+        <option value="friend">A friend sent me</option>
+        <option value="takeout">Picking up takeout</option>
+        <option value="celebrating">Celebrating something 🎉</option>
+        <option value="social">Saw you on social media</option>
+        <option value="event">Here for an event / game night</option>
+      </select>
+      <label for="name-input" class="lbl">First name</label>
+      <input id="name-input" class="field" type="text" autocomplete="given-name" placeholder="What should we call you?">
+      <label for="phone-input" class="lbl">Mobile number</label>
+      <input id="phone-input" class="field" type="tel" autocomplete="tel" placeholder="(555) 555-5555">
+      <label for="email-input" class="lbl">Email <span style="text-transform:none;letter-spacing:0;font-weight:500">(optional)</span></label>
+      <input id="email-input" class="field" type="email" autocomplete="email" placeholder="you@email.com">
+      <label id="consent-wrap" class="consent hidden">
+        <input id="consent-input" type="checkbox">
+        <span><span id="consent-text">Yes, text me rewards, reminders and offers. Up to 4 msgs/month. Msg &amp; data rates may apply. Reply STOP to cancel, HELP for help. Consent is not a condition of purchase.</span> (Optional)</span>
+      </label>
+      <button class="btn" onclick="checkIn()">Join the club</button>
+      <p id="checkin-error" class="err hidden" role="alert"></p>
+      <p class="fine">By joining you agree to the <a href="/terms#terms" target="_blank">Program Terms</a>, <a href="/rules" target="_blank">Draw Rules</a> and <a href="/privacy" target="_blank">Privacy Policy</a>. No purchase necessary to join or enter. Emails include an unsubscribe link.</p>
+    </div>
+  </div>
+
+  <!-- STEP 2: TODAY'S CODE (the server reads this screen) -->
+  <div id="step-2" class="step stack">
+    <div id="scan-card" class="pass s-reward">
+      <p id="pass-heading" class="head">You're in the club</p>
+      <p id="scan-label" class="label">REWARD</p>
+      <p id="scan-sub" class="sub">Show this screen to your server</p>
+      <p class="codecap">Today's code</p>
+      <p id="visit-code" class="code">—</p>
+      <div class="clock"><span class="live-dot"></span><span id="live-clock">--:--:--</span></div>
+      <p id="live-date" class="date"></p>
+      <h2 id="pass-offer-text" class="what">—</h2>
+    </div>
+
+    <div id="bank-box" class="bank hidden">
+      <small>Saved for your next slow night</small>
+      <ul id="bank-list"></ul>
+    </div>
+
+    <div id="draw-box-2" class="draw hidden">
+      <div class="plate"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#d81b6a" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 3v8a2 2 0 0 0 2 2v8M9 3v8a2 2 0 0 1-2 2M7 3v6M17 21V3c-2 1-3 4-3 7s1 4 3 4"/></svg></div>
+      <div>
+        <b id="draw-title-2">You're in this week's free-meal draw</b>
+        <p id="draw-text-2"></p>
+      </div>
+    </div>
+
+    <div id="progress-card" class="progress">
+      <div class="streak-row">
+        <div>
+          <small class="cap">Your streak</small>
+          <p><span id="streak-num" class="streak-num">0</span> <span style="font-size:18px;font-weight:700">week streak</span></p>
+        </div>
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="#ffc83d" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+      </div>
+      <div id="streak-weeks" class="weeks"></div>
+      <p id="streak-msg" class="streak-msg"></p>
+      <div id="next-prize" class="next">
+        <p style="font-size:14px"><span id="next-remaining"></span></p>
+        <b id="next-prize-name"></b>
+        <div class="bar"><i id="next-bar" style="width:0%"></i></div>
+      </div>
+      <p style="margin-top:20px"><small class="cap">Badges</small></p>
+      <div id="badge-grid" class="badges"></div>
+    </div>
+
+    <div class="card member">
+      <p id="visit-number" class="num"></p>
+      <p style="font-size:12px;color:var(--muted);margin-top:4px">Member ID <span id="reward-id" class="id">—</span></p>
+      <p id="pass-note" style="font-size:12px;color:var(--muted);margin-top:6px">This phone is remembered: next time just scan, no form.</p>
+      <div class="divider"></div>
+      <div style="text-align:left">
+        <label for="today-visit" class="lbl">What brings you in today?</label>
+        <select id="today-visit" class="field">
+          <option value="" disabled selected>Choose one…</option>
+          <option value="first_time">First time here</option>
+          <option value="regular">I'm a regular</option>
+          <option value="friend">A friend sent me</option>
+          <option value="takeout">Picking up takeout</option>
+          <option value="celebrating">Celebrating something 🎉</option>
+          <option value="social">Saw you on social media</option>
+          <option value="event">Here for an event / game night</option>
+        </select>
+        <button id="today-submit" class="btn" style="margin-bottom:10px">Submit</button>
+        <p id="today-saved" class="ok hidden">Thanks! Saved to your profile.</p>
+        <p id="today-error" class="err hidden"></p>
+      </div>
+      <button id="not-me" class="link">Not you? Use different info</button>
+    </div>
+  </div>
+
+  <!-- STEP 3: KNOWN GUEST, NEW RESTAURANT (one-tap join) -->
+  <div id="step-3" class="step">
+    <div class="card pop-in">
+      <p class="kicker" style="color:var(--pink-deep);text-align:center">Welcome back to the club</p>
+      <h2 id="join-heading" style="font-size:28px;font-weight:800;text-align:center;margin:4px 0">Hi there!</h2>
+      <p id="join-sub" style="color:var(--muted);font-size:14px;text-align:center;margin-bottom:18px">Join with the info you already gave us, no typing needed.</p>
+      <label for="join-visit" class="lbl">Is this your first time here?</label>
+      <select id="join-visit" class="field">
+        <option value="" disabled selected>Choose one…</option>
+        <option value="first_time">First time here</option>
+        <option value="regular">I'm a regular</option>
+        <option value="friend">A friend sent me</option>
+        <option value="takeout">Picking up takeout</option>
+        <option value="celebrating">Celebrating something 🎉</option>
+        <option value="social">Saw you on social media</option>
+        <option value="event">Here for an event / game night</option>
+      </select>
+      <label id="join-consent-wrap" class="consent hidden">
+        <input id="join-consent" type="checkbox">
+        <span><span id="join-consent-text">Yes, text me rewards, reminders and offers. Up to 4 msgs/month. Msg &amp; data rates may apply. Reply STOP to cancel, HELP for help. Consent is not a condition of purchase.</span> (Optional)</span>
+      </label>
+      <button id="join-btn" class="btn">Join the club</button>
+      <p id="join-error" class="err hidden" role="alert"></p>
+      <p class="fine">By joining you agree to the <a href="/terms#terms" target="_blank">Program Terms</a>, <a href="/rules" target="_blank">Draw Rules</a> and <a href="/privacy" target="_blank">Privacy Policy</a>.</p>
+      <button id="join-not-me" class="link">Not you? Use different info</button>
+    </div>
+  </div>
+
+  <p class="foot">Powered by <b>Tuesday Club</b> · <a href="/rules">Draw rules</a> · <a href="/privacy">Privacy</a></p>
+</main>
+
+<!-- NEW BADGE CELEBRATION -->
+<div id="badge-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="badge-title">
+  <div class="box">
+    <div id="badge-hex-outer" class="big-badge" style="background:#ffc83d">
+      <div id="badge-hex-inner" style="background:#ff4d94">
+        <svg id="badge-icon" width="52" height="52" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+      </div>
+    </div>
+    <p style="font-weight:700;margin-top:22px;color:var(--mint)">New badge</p>
+    <h2 id="badge-title">3 visits</h2>
+    <p id="badge-body" class="body"></p>
+    <div id="badge-prize" class="won hidden">
+      <small>You won</small>
+      <b id="badge-prize-name"></b>
+      <p id="badge-prize-note" style="font-size:12px;margin-top:2px">Show your server the pink screen</p>
+    </div>
+    <button id="badge-close" class="btn">See my progress</button>
+  </div>
+</div>
+
+<script src="/js/confetti.js"></script>
+<script src="/js/checkin.js"></script>
+</body>
+</html>

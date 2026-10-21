@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tuesday Club — Turn your Tuesdays into Fridays</title>
+<meta name="description" content="Tuesday Club fills restaurants' slow nights: guests earn rewards on busy nights, cash them in Monday to Wednesday evenings, and enter a weekly free-meal draw. No app, no tablet. First 30 days free.">
+<link rel="canonical" href="__BASE_URL__/welcome">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Tuesday Club">
+<meta property="og:title" content="Tuesday Club: turn your Tuesdays into Fridays">
+<meta property="og:description" content="Guests earn on busy nights and cash in on slow nights, plus a weekly free-meal draw. For local restaurants. First 30 days free.">
+<meta property="og:url" content="__BASE_URL__/welcome">
+<meta property="og:image" content="__BASE_URL__/media/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Tuesday Club: Turn your Tuesdays into Fridays.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="__BASE_URL__/media/og-image.png">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#5b2ee5">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --grape: #5b2ee5; --grape-deep: #3d1aa8; --grape-light: #efe9ff; --pink: #ff4d94; --pink-deep: #d81b6a; --pink-light: #ffe3ef;
+    --sun: #ffc83d; --sun-light: #fff1c9; --teal: #0b8a74; --mint: #1fd1b0; --mint-light: #d9f7f0; --sky: #1f6fd1; --tangerine: #ff7a2f;
+    --cream: #fff6e6; --paper: #ffffff; --ink: #1d1640; --muted: #5c5578; --line: #ece4f7;
+    --font: "Poppins", "Helvetica Neue", Arial, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--cream); color: var(--ink); font-family: var(--font); font-size: 17px; line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  img, svg, video { max-width: 100%; }
+  a { color: var(--grape); }
+  :focus-visible { outline: 3px solid var(--pink); outline-offset: 3px; }
+  .hidden { display: none !important; }
+  .wrap { max-width: 1160px; margin: 0 auto; padding-inline: 20px; }
+  h1, h2, h3 { margin: 0; font-weight: 800; letter-spacing: -0.02em; text-wrap: balance; }
+  p { margin: 0; }
+  .eyebrow { font-weight: 700; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--pink-deep); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-family: var(--font); font-weight: 800; font-size: 17px; padding: 15px 28px; border-radius: 999px; text-decoration: none; border: 0; cursor: pointer; transition: transform .12s, box-shadow .12s; }
+  .btn-main { background: var(--pink-deep); color: #fff; box-shadow: 0 6px 0 #8f0f43; }
+  .btn-main:hover { transform: translateY(-2px); box-shadow: 0 8px 0 #8f0f43; }
+  .btn-main:active { transform: translateY(4px); box-shadow: 0 2px 0 #8f0f43; }
+  .btn-ghost { background: rgba(255,255,255,.12); color: #fff; border: 2px solid rgba(255,255,255,.4); }
+  .btn-ghost:hover { border-color: #fff; }
+
+  /* header */
+  header { position: sticky; top: 0; z-index: 20; background: rgba(91,46,229,.97); backdrop-filter: blur(8px); }
+  header .wrap { display: flex; align-items: center; gap: 24px; padding-block: 12px; }
+  .logo { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 21px; color: #fff; text-decoration: none; letter-spacing: -.01em; }
+  .logo .mark { width: 34px; height: 34px; border-radius: 11px; background: var(--sun); display: flex; align-items: center; justify-content: center; transform: rotate(-8deg); }
+  nav.top { display: flex; gap: 24px; margin-left: auto; }
+  nav.top a { color: #fff; text-decoration: none; font-weight: 600; font-size: 15px; }
+  nav.top a:hover { color: var(--sun); }
+  header .btn { padding: 10px 20px; font-size: 15px; box-shadow: 0 4px 0 #8f0f43; }
+  @media (max-width: 820px) { nav.top { display: none; } header .btn { margin-left: auto; } }
+  .logo, header .btn { white-space: nowrap; }
+  @media (max-width: 420px) { .logo { font-size: 18px; gap: 8px; } .logo .mark { width: 30px; height: 30px; } header .btn { padding: 9px 14px; font-size: 14px; } }
+
+  /* hero */
+  .hero { background: var(--grape); color: #fff; position: relative; overflow: hidden; isolation: isolate; }
+  .hero::before { content: ""; position: absolute; inset: 0; z-index: -1;
+    background:
+      radial-gradient(circle at 6% 18%, var(--sun) 0 9px, transparent 10px),
+      radial-gradient(circle at 46% 9%, var(--pink) 0 13px, transparent 14px),
+      radial-gradient(circle at 92% 12%, var(--mint) 0 8px, transparent 9px),
+      radial-gradient(circle at 40% 92%, var(--tangerine) 0 11px, transparent 12px),
+      radial-gradient(circle at 3% 86%, #fff 0 4px, transparent 5px),
+      radial-gradient(circle at 60% 60%, #fff 0 3px, transparent 4px); }
+  .hero::after { content: ""; position: absolute; width: 640px; height: 640px; border-radius: 50%; background: var(--grape-deep); right: -200px; top: -160px; z-index: -1; }
+  .hero .wrap { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 48px; align-items: center; padding-block: 72px 92px; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; background: var(--sun); color: var(--ink); font-weight: 700; font-size: 14px; padding: 7px 16px; border-radius: 999px; margin-bottom: 22px; transform: rotate(-2deg); }
+  .hero h1 { font-size: clamp(44px, 7vw, 84px); line-height: 1; margin-bottom: 22px; }
+  .hero h1 em { font-style: normal; color: var(--sun); position: relative; white-space: nowrap; }
+  .hero h1 em::after { content: ""; position: absolute; left: 0; right: 0; bottom: 4px; height: 12px; background: var(--pink); border-radius: 6px; z-index: -1; opacity: .9; }
+  .hero .lede { font-size: 20px; color: #e8e2ff; max-width: 32em; margin-bottom: 32px; }
+  .hero .ctas { display: flex; flex-wrap: wrap; gap: 14px; }
+  .hero .fine { font-size: 14px; color: #cfc5ff; margin-top: 20px; }
+  @media (max-width: 920px) { .hero .wrap { grid-template-columns: minmax(0, 1fr); padding-block: 40px 70px; } }
+
+  /* friday -> tuesday flip */
+  .flip { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: center; }
+  .night { background: #fff; color: var(--ink); border-radius: 30px; padding: 18px; box-shadow: 0 26px 50px rgba(20,8,70,.35); }
+  .night:first-child { transform: rotate(-4deg) translateY(10px); }
+  .night:last-child { transform: rotate(3deg) translateY(-10px); }
+  .night .day { font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; }
+  .night .scr { border-radius: 22px; padding: 16px 12px; text-align: center; margin-top: 10px; }
+  .night .scr b { display: block; font-size: 26px; line-height: 1.05; }
+  .night .scr .code { font-family: var(--mono); font-size: 28px; margin: 6px 0 2px; }
+  .night .scr small { font-size: 12px; }
+  .night .room { margin-top: 12px; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; }
+  .night .room i { aspect-ratio: 1; border-radius: 6px; background: var(--line); }
+  .night .room i.full { background: var(--grape); }
+  .night .cap { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: center; }
+  .arrow { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 56px; height: 56px; border-radius: 50%; background: var(--sun); display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 20px rgba(0,0,0,.25); z-index: 2; }
+  @media (max-width: 520px) { .flip { gap: 10px; } .night { padding: 12px; border-radius: 22px; } .night .scr b { font-size: 19px; } .night .scr .code { font-size: 20px; } .arrow { width: 44px; height: 44px; } }
+
+  section { padding-block: 90px; }
+  .section-head { max-width: 700px; margin-bottom: 44px; }
+  .section-head h2 { font-size: clamp(34px, 5vw, 54px); line-height: 1.05; margin-top: 10px; }
+  .section-head p { color: var(--muted); font-size: 19px; margin-top: 14px; }
+
+  /* problem strip */
+  .problem { background: var(--ink); color: #fff; padding-block: 56px; }
+  .problem .wrap { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; }
+  .problem b { display: block; font-size: 26px; line-height: 1.15; color: var(--sun); margin-bottom: 6px; }
+  .problem p { color: #cfc8ee; font-size: 16px; }
+  @media (max-width: 820px) { .problem .wrap { grid-template-columns: minmax(0, 1fr); } }
+
+  /* steps */
+  .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+  .step { background: var(--paper); border-radius: 30px; padding: 26px; border: 2px solid var(--line); display: flex; flex-direction: column; gap: 14px; }
+  .step .art { border-radius: 22px; height: 180px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+  .step .n { width: 40px; height: 40px; border-radius: 13px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; }
+  .step h3 { font-size: 24px; line-height: 1.15; }
+  .step p { color: var(--muted); }
+  @media (max-width: 920px) { .steps { grid-template-columns: minmax(0, 1fr); } }
+  .chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; width: 88%; }
+  .chip { border-radius: 14px; color: #fff; padding: 7px 8px; font-size: 11px; line-height: 1.2; font-weight: 600; }
+  .chip b { font-family: var(--mono); font-size: 15px; display: block; }
+  .ticket { background: #fff; border-radius: 18px; padding: 14px 16px; width: 78%; box-shadow: 0 12px 26px rgba(0,0,0,.12); text-align: left; position: relative; }
+  .ticket::before, .ticket::after { content: ""; position: absolute; top: 50%; width: 18px; height: 18px; border-radius: 50%; background: var(--sun-light); transform: translateY(-50%); }
+  .ticket::before { left: -9px; } .ticket::after { right: -9px; }
+  .ticket small { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--pink-deep); }
+  .ticket b { display: block; font-size: 20px; line-height: 1.15; }
+  .moon-card { background: var(--ink); color: #fff; border-radius: 18px; padding: 14px 16px; width: 80%; display: flex; gap: 12px; align-items: center; }
+  .moon-card .m { width: 40px; height: 40px; border-radius: 12px; background: var(--mint); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .moon-card small { display: block; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--mint); }
+  .moon-card b { font-size: 16px; }
+
+  /* draw band */
+  .draw-band { background: var(--sun); overflow: hidden; }
+  .draw-band .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: center; }
+  .draw-band h2 { font-size: clamp(36px, 5vw, 58px); line-height: 1.02; margin: 10px 0 16px; }
+  .draw-band .lead { font-size: 19px; color: #3b3460; max-width: 30em; }
+  .perks { display: grid; gap: 12px; margin-top: 24px; padding: 0; list-style: none; }
+  .perks li { display: flex; gap: 12px; align-items: flex-start; font-weight: 600; }
+  .perks .tick { width: 26px; height: 26px; border-radius: 50%; background: var(--grape); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .winner { background: var(--grape); color: #fff; border-radius: 34px; padding: 30px; box-shadow: 0 24px 50px rgba(61,26,168,.35); text-align: center; position: relative; overflow: hidden; transform: rotate(2deg); }
+  .winner::before { content: ""; position: absolute; inset: 0;
+    background: radial-gradient(circle at 12% 14%, var(--sun) 0 7px, transparent 8px), radial-gradient(circle at 88% 22%, var(--pink) 0 10px, transparent 11px), radial-gradient(circle at 82% 88%, var(--mint) 0 7px, transparent 8px), radial-gradient(circle at 14% 82%, var(--tangerine) 0 6px, transparent 7px); }
+  .winner > * { position: relative; }
+  .winner small { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--sun); }
+  .winner .big { font-size: 46px; font-weight: 800; line-height: 1; margin: 6px 0; }
+  .winner .code { font-family: var(--mono); font-size: 44px; margin: 10px 0 4px; }
+  .winner .what { background: rgba(255,255,255,.16); border-radius: 18px; padding: 12px; font-weight: 800; font-size: 19px; margin-top: 14px; }
+  .entries { display: flex; justify-content: center; gap: 6px; margin-top: 16px; }
+  .entries i { width: 30px; height: 40px; border-radius: 8px; background: rgba(255,255,255,.18); display: flex; align-items: center; justify-content: center; font-style: normal; font-size: 11px; font-weight: 700; }
+  .entries i.on { background: var(--pink); }
+  @media (max-width: 920px) { .draw-band .wrap { grid-template-columns: minmax(0, 1fr); } .winner { transform: none; } }
+
+  /* video */
+  .video-frame { border-radius: 34px; overflow: hidden; background: var(--grape); aspect-ratio: 16 / 9; position: relative; box-shadow: 0 20px 44px rgba(61,26,168,.25); max-width: 980px; border: 6px solid #fff; }
+  .video-frame video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #vsl-missing { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; padding: 32px; color: #fff; background: radial-gradient(circle at 80% 20%, var(--pink), var(--grape) 60%); }
+  #vsl-missing p:first-child { font-size: 32px; font-weight: 800; }
+
+  /* features */
+  .features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  .feature { background: var(--paper); border-radius: 26px; padding: 26px; border: 2px solid var(--line); }
+  .feature .ic { width: 50px; height: 50px; border-radius: 16px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; transform: rotate(-6deg); }
+  .feature h3 { font-size: 21px; margin-bottom: 6px; }
+  .feature p { color: var(--muted); font-size: 16px; }
+  @media (max-width: 920px) { .features { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 580px) { .features { grid-template-columns: minmax(0, 1fr); } }
+
+  /* trial */
+  .trial { background: var(--pink-deep); color: #fff; border-radius: 40px; padding: 52px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 30px; align-items: center; position: relative; overflow: hidden; }
+  .trial::after { content: ""; position: absolute; right: -60px; top: -70px; width: 240px; height: 240px; border-radius: 50%; background: var(--pink); }
+  .trial > * { position: relative; z-index: 1; }
+  .trial .eyebrow { color: var(--sun); }
+  .trial h2 { font-size: clamp(40px, 6vw, 64px); line-height: 1; margin: 8px 0 12px; }
+  .trial p { color: #ffe3ef; max-width: 34em; font-size: 18px; }
+  .trial .btn-main { background: var(--sun); color: var(--ink); box-shadow: 0 6px 0 #c99412; }
+  @media (max-width: 760px) { .trial { grid-template-columns: minmax(0, 1fr); padding: 34px 24px; } }
+
+  /* faq */
+  .faq { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 40px; }
+  details { background: var(--paper); border: 2px solid var(--line); border-radius: 24px; padding: 18px 22px; margin-bottom: 12px; }
+  summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; gap: 16px; font-weight: 700; font-size: 18px; }
+  summary::-webkit-details-marker { display: none; }
+  summary .plus { color: var(--pink-deep); font-size: 26px; line-height: 1; transition: transform .2s; }
+  details[open] summary .plus { transform: rotate(45deg); }
+  details p { color: var(--muted); margin-top: 10px; font-size: 16px; }
+  @media (max-width: 920px) { .faq { grid-template-columns: minmax(0, 1fr); } }
+
+  /* book */
+  .book { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 40px; align-items: start; }
+  .book h2 { font-size: clamp(38px, 5.5vw, 58px); line-height: 1.03; margin: 10px 0 14px; }
+  .book p.lead { color: var(--muted); font-size: 19px; }
+  form#book-form { background: var(--grape); color: #fff; border-radius: 36px; padding: 36px; display: grid; gap: 18px; position: relative; }
+  form#book-form label { display: block; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+  form#book-form input { width: 100%; background: #fff; color: var(--ink); border: 3px solid transparent; border-radius: 999px; padding: 13px 18px; font: inherit; font-size: 16px; }
+  form#book-form input:focus { outline: none; border-color: var(--sun); }
+  .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  form#book-form .btn { width: 100%; font-size: 19px; padding-block: 17px; background: var(--sun); color: var(--ink); box-shadow: 0 6px 0 #c99412; }
+  #book-error { color: var(--sun); font-size: 14px; font-weight: 600; }
+  #book-done { background: var(--mint); color: var(--ink); border-radius: 26px; padding: 26px; }
+  #book-done p:first-child { font-size: 26px; font-weight: 800; }
+  @media (max-width: 920px) { .book { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 560px) { .two { grid-template-columns: minmax(0, 1fr); } form#book-form { padding: 26px 20px; } }
+
+  footer { background: var(--ink); color: #b9b1dc; font-size: 14px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding-block: 34px; }
+  footer .logo { font-size: 18px; }
+  footer .logo .mark { width: 28px; height: 28px; border-radius: 9px; }
+  footer .copy { margin-left: auto; }
+  @media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <a href="/welcome" class="logo"><span class="mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="#5b2ee5" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg></span>Tuesday Club</a>
+    <nav class="top" aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#draw">Free-meal draw</a>
+      <a href="#trial">Free trial</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a href="#book" class="btn btn-main">Book a meeting</a>
+  </div>
+</header>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="wrap">
+    <div>
+      <span class="pill">★ For local restaurants &amp; cafés</span>
+      <h1>Turn your Tuesdays into <em>Fridays.</em></h1>
+      <p class="lede">Guests tap a tag on the table on your busy nights and earn rewards they cash in on your slow nights. A weekly free-meal draw keeps them checking in. You fill Monday to Wednesday without discounting your weekend.</p>
+      <div class="ctas">
+        <a href="#book" class="btn btn-main">Book a meeting →</a>
+        <a href="#how" class="btn btn-ghost">See how it works</a>
+      </div>
+      <p class="fine">First 30 days free. No app for guests, no tablet for servers.</p>
+    </div>
+
+    <div class="flip" aria-label="Example: a guest earns on Friday and cashes in on Tuesday">
+      <div class="night">
+        <p class="day"><span>Friday 7pm</span><span>Busy</span></p>
+        <div class="scr" style="background:var(--sun)">
+          <b>SAVED!</b>
+          <p class="code">S-0142</p>
+          <small>Reward saved for Tuesday</small>
+        </div>
+        <div class="room" aria-hidden="true"><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i></div>
+        <p class="cap">Every table full</p>
+      </div>
+      <span class="arrow" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1d1640" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      <div class="night">
+        <p class="day"><span>Tuesday 6pm</span><span>Slow</span></p>
+        <div class="scr" style="background:var(--teal);color:#fff">
+          <b>REWARD</b>
+          <p class="code">R-0187</p>
+          <small>Free knots with a $15+ order</small>
+        </div>
+        <div class="room" aria-hidden="true"><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i></i><i></i><i></i><i></i></div>
+        <p class="cap">Empty tables, filled</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PROBLEM -->
+<div class="problem">
+  <div class="wrap">
+    <div><b>Fridays run themselves.</b><p>You're full, the kitchen is slammed and guests wait. A discount tonight just gives away money you'd make anyway.</p></div>
+    <div><b>Tuesdays cost you.</b><p>Same rent, same staff, far fewer tickets. That's where a returning guest is worth the most.</p></div>
+    <div><b>Tuesday Club moves them.</b><p>Rewards earned on your busy nights only work on your slow nights, with a minimum order, so every reward comes with a real check.</p></div>
+  </div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">How it works</p>
+      <h2>Earn on busy nights. Cash in on slow ones.</h2>
+      <p>Three steps for guests, zero extra work for your servers.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="art" style="background:var(--grape-light)">
+          <div class="chips">
+            <div class="chip" style="background:#0b8a74"><b>R-0143</b>Reward</div>
+            <div class="chip" style="background:#d81b6a"><b>B-0144</b>Bonus prize</div>
+            <div class="chip" style="background:#5b2ee5"><b>W-0145</b>Free meal</div>
+            <div class="chip" style="background:#ffc83d;color:#1d1640"><b>S-0146</b>Saved</div>
+            <div class="chip" style="background:#1f6fd1"><b>N-0147</b>New</div>
+            <div class="chip" style="background:#6b6680"><b>X-0148</b>Used today</div>
+          </div>
+        </div>
+        <span class="n" style="background:var(--grape)">1</span>
+        <h3>Guests tap the table, any night</h3>
+        <p>A card on each table holds a tap tag and a QR code. Guests join once with their name and number, no app. Every visit counts toward streaks and prizes.</p>
+      </div>
+      <div class="step">
+        <div class="art" style="background:var(--mint-light)">
+          <div class="moon-card">
+            <span class="m"><svg width="22" height="22" viewBox="0 0 24 24" fill="#1d1640" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></span>
+            <div><small>Rewards are on right now</small><b>Mon–Wed, 5pm–8pm</b></div>
+          </div>
+        </div>
+        <span class="n" style="background:var(--teal)">2</span>
+        <h3>Rewards unlock on your slow nights</h3>
+        <p>You pick the nights and hours, like Monday to Wednesday, 5 to 8pm. Rewards need a minimum order, so a shared code still brings you a paying guest.</p>
+      </div>
+      <div class="step">
+        <div class="art" style="background:var(--sun-light)">
+          <div class="ticket"><small>This week's draw</small><b>Win your whole meal free</b><p style="font-size:13px;color:var(--muted)">Every check-in = 1 entry</p></div>
+        </div>
+        <span class="n" style="background:var(--pink-deep)">3</span>
+        <h3>Every check-in is a shot at a free meal</h3>
+        <p>Each week one guest wins their meal, up to a cap you set. It gives guests a reason to scan every single visit, so you see every visit.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DRAW -->
+<section id="draw" class="draw-band">
+  <div class="wrap">
+    <div>
+      <p class="eyebrow" style="color:var(--grape)">The weekly free-meal draw</p>
+      <h2>One lucky table. Every single week.</h2>
+      <p class="lead">On top of free apps and desserts, every guest who checks in gets a chance to have their entire meal on the house. It costs you one meal a week and turns "I'll scan next time" into "let me scan first".</p>
+      <ul class="perks">
+        <li><span class="tick"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span>Winner picked automatically every Monday morning</li>
+        <li><span class="tick"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span>You set the cap, like a meal up to $40</li>
+        <li><span class="tick"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span>Winners claim it on a slow night, so even the prize fills a table</li>
+        <li><span class="tick"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span>Official rules included. No purchase necessary to enter</li>
+      </ul>
+    </div>
+    <div class="winner" aria-label="Example winner screen">
+      <small>You won this week's draw</small>
+      <p class="big">FREE MEAL</p>
+      <p class="code">W-0203</p>
+      <p style="font-size:14px;opacity:.9">Show this screen to your server</p>
+      <p class="what">Your meal is on us, up to $40</p>
+      <div class="entries" aria-hidden="true"><i class="on">Mon</i><i>Tue</i><i class="on">Wed</i><i>Thu</i><i class="on">Fri</i><i class="on">Sat</i><i>Sun</i></div>
+      <p style="font-size:13px;opacity:.85;margin-top:8px">4 check-ins this week = 4 entries</p>
+    </div>
+  </div>
+</section>
+
+<!-- VIDEO -->
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">See it in action</p>
+      <h2>The 60-second tour.</h2>
+    </div>
+    <div class="video-frame">
+      <video id="vsl" controls playsinline preload="metadata" poster="/media/media/intheloop-vsl-poster.jpg" aria-label="Explainer video: how guests tap a table sticker, earn rewards and build streaks, about one minute" title="How it works">
+        <source src="/media/media/intheloop-vsl.mp4" type="video/mp4">
+      </video>
+      <div id="vsl-missing" class="hidden">
+        <p>Video coming soon</p>
+        <p>Book a meeting below and we'll show you live.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">What your restaurant gets</p>
+      <h2>Everything you need to fill a slow night.</h2>
+    </div>
+    <div class="features">
+      <div class="feature"><div class="ic" style="background:var(--grape-light)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#5b2ee5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></div><h3>Your slow nights, your hours</h3><p>Choose the nights and the time window rewards can be used. Change it anytime.</p></div>
+      <div class="feature"><div class="ic" style="background:var(--pink-light)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d81b6a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><h3>Minimum order to redeem</h3><p>Every reward needs a set spend, so you never hand out free food to someone who isn't ordering.</p></div>
+      <div class="feature"><div class="ic" style="background:var(--sun-light)"><svg width="24" height="24" viewBox="0 0 24 24" fill="#c99412" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg></div><h3>Prizes at 2, 3, 5 and 10 visits</h3><p>Plus weekly streak prizes. You pick cheap-to-make items like a side, dessert or drink.</p></div>
+      <div class="feature"><div class="ic" style="background:var(--mint-light)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0b8a74" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6M17 11l2 2 4-4"/></svg></div><h3>Your own guest list</h3><p>Every guest who joins, with their name, number and email. It's yours to keep, and you can download it anytime.</p></div>
+      <div class="feature"><div class="ic" style="background:var(--grape-light)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#5b2ee5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></div><h3>Automatic follow-ups</h3><p>Thank-yous, streak reminders, Google review asks and winner messages go out on their own.</p></div>
+      <div class="feature"><div class="ic" style="background:var(--pink-light)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d81b6a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div><h3>Slow-night results, live</h3><p>A private results page and a monthly report: slow-night visits, prizes used and estimated revenue.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- TRIAL -->
+<section id="trial" style="padding-top:0">
+  <div class="wrap">
+    <div class="trial">
+      <div>
+        <p class="eyebrow">Free trial</p>
+        <h2>30 days, on us.</h2>
+        <p>We set up your table cards, your slow-night hours, your prizes and your weekly draw. You see your Tuesdays change before you pay anything.</p>
+      </div>
+      <a href="#book" class="btn btn-main">Start my free trial</a>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" style="padding-top:0">
+  <div class="wrap faq">
+    <div>
+      <p class="eyebrow">FAQ</p>
+      <h2 style="font-size:clamp(34px,5vw,54px);margin-top:10px;line-height:1.05">Good questions.</h2>
+    </div>
+    <div>
+      <details><summary>Why can't guests use rewards on a Friday?<span class="plus">+</span></summary><p>Because you're already full on Friday. Rewards are for filling empty tables, so they only work during the slow nights and hours you choose. Guests still check in on busy nights: the visit counts, and the reward waits for them.</p></details>
+      <details><summary>Won't people just share codes?<span class="plus">+</span></summary><p>Let them. Every reward needs a minimum order you set, like $15 or $20, so a shared code still means a paying guest on a slow night. One reward per person per day.</p></details>
+      <details><summary>How does the free-meal draw work?<span class="plus">+</span></summary><p>Every day a guest checks in, they get one entry. Every Monday morning one winner is picked at random and gets their meal free, up to a cap you choose, on a slow night within 30 days. Official rules are included and no purchase is needed to enter. Have your own lawyer look over the rules if you'd like.</p></details>
+      <details><summary>Do my guests need to download an app?<span class="plus">+</span></summary><p>No. Tapping the tag or scanning the code opens a page in their phone's browser. After the first time, their phone remembers them.</p></details>
+      <details><summary>What do my servers have to do?<span class="plus">+</span></summary><p>Look at the guest's screen. Green means give the reward, pink means a bonus prize, purple means a free meal, yellow means saved for a slow night (nothing to give). A live clock shows it's not a screenshot.</p></details>
+      <details><summary>Can guests stop the messages?<span class="plus">+</span></summary><p>Yes. Guests opt in themselves, every email has an unsubscribe link, and texts stop when they reply STOP.</p></details>
+      <details><summary>What happens after the 30 days?<span class="plus">+</span></summary><p>We'll walk through pricing on your call, so you can decide once you've seen it work.</p></details>
+    </div>
+  </div>
+</section>
+
+<!-- BOOK -->
+<section id="book" style="padding-top:0">
+  <div class="wrap book">
+    <div>
+      <p class="eyebrow">Book a meeting</p>
+      <h2>Let's fill your slow nights.</h2>
+      <p class="lead">Pick a time that works. We'll confirm by text or email and show you how it would work at your restaurant.</p>
+    </div>
+    <form id="book-form" novalidate>
+      <div>
+        <label for="b-restaurant">Restaurant name</label>
+        <input id="b-restaurant" required type="text" placeholder="Mama's Kitchen">
+      </div>
+      <div class="two">
+        <div>
+          <label for="b-phone">Phone</label>
+          <input id="b-phone" type="tel" autocomplete="tel" placeholder="(555) 555-5555">
+        </div>
+        <div>
+          <label for="b-email">Email</label>
+          <input id="b-email" type="email" autocomplete="email" placeholder="you@restaurant.com">
+        </div>
+      </div>
+      <div>
+        <label for="b-time">Preferred meeting time</label>
+        <input id="b-time" required type="datetime-local">
+      </div>
+      <div class="hp" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden">
+        <label for="b-website">Leave this empty</label>
+        <input id="b-website" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
+      <button type="submit" class="btn">Request my meeting</button>
+      <p id="book-error" class="hidden" role="alert"></p>
+      <div id="book-done" class="hidden" role="status">
+        <p>You're booked in!</p>
+        <p>Thanks! We'll confirm your time by text or email shortly.</p>
+      </div>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span class="logo"><span class="mark"><svg width="15" height="15" viewBox="0 0 24 24" fill="#5b2ee5" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg></span>Tuesday Club</span>
+    <span>Worcester, MA</span>
+    <span><a href="/privacy" style="color:inherit">Privacy</a> · <a href="/terms#terms" style="color:inherit">Terms</a> · <a href="/rules" style="color:inherit">Draw rules</a></span>
+    <span class="copy">© <span id="yr"></span> Tuesday Club</span>
+  </div>
+</footer>
+
+<script src="/js/confetti.js"></script>
+<script src="/js/welcome.js"></script>
+</body>
+</html>
