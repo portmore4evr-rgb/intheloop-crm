@@ -4,7 +4,7 @@ let currentOffer = '';
 let minSpend = null, minSpendBig = null; // minimum order to redeem, set per restaurant in the CRM
 const minText = (n) => (n ? `with a $${n}+ order` : '');
 let restaurantName = '';
-let win = null;      // slow-night window from the server: { label, openNow, opensAt, closesAt }
+let win = null;      // Club Night window from the server: { label, openNow, opensAt, closesAt }
 let drawInfo = null; // weekly free-meal draw: { cap, lastWinner }
 
 // ---- saved-on-this-phone token (so guests only fill the form once) ----
@@ -35,11 +35,11 @@ function consentText() {
 
 const SCAN_LOOK = {
   reward: { cls: 's-reward', label: 'REWARD', sub: 'Show this screen to your server' },
-  new: { cls: 's-new', label: 'WELCOME!', sub: "You're in! Your reward is ready on your next slow-night visit" },
+  new: { cls: 's-new', label: 'WELCOME!', sub: "You're in! Your reward is ready on your next Club Night visit" },
   used: { cls: 's-used', label: 'USED TODAY', sub: 'Rewards are once per day. See you next time!' },
   bonus: { cls: 's-bonus', label: 'BONUS PRIZE', sub: 'You unlocked a bigger prize! Show this screen to your server' },
   meal: { cls: 's-meal', label: 'FREE MEAL', sub: 'You won the weekly draw! Show this screen to your server' },
-  saved: { cls: 's-saved', label: 'SAVED!', sub: "This visit counts. Nothing to give today: your reward is saved for a slow night" },
+  saved: { cls: 's-saved', label: 'SAVED!', sub: "This visit counts. Nothing to give today: your reward is saved for a Club Night" },
 };
 
 const BOLT = '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>';
@@ -78,7 +78,7 @@ function renderProgress(p) {
       <b>${b.label}</b>${b.prize ? `<span>${escapeHtml(b.prize)}</span>` : ''}</div>`;
   }).join('');
 
-  // Prizes and free-meal wins waiting for the slow-night window
+  // Prizes and free-meal wins waiting for the Club Night window
   const saved = p.saved || [];
   const bank = document.getElementById('bank-box');
   bank.classList.toggle('hidden', !saved.length);
@@ -117,7 +117,7 @@ function showNextBadge() {
     prizeBox.classList.remove('hidden');
     document.getElementById('badge-prize-name').textContent = b.prize;
     document.getElementById('badge-prize-note').textContent = lastScanStatus === 'saved'
-      ? `Saved for your next slow night${win ? `: ${win.label}` : ''}` : 'Show your server the pink screen';
+      ? `Saved for your next Club Night${win ? `: ${win.label}` : ''}` : 'Show your server the pink screen';
   }
   else prizeBox.classList.add('hidden');
   document.getElementById('badge-close').textContent = badgeQueue.length ? 'Next badge' : 'See my progress';
@@ -173,7 +173,7 @@ function showPass(data, heading) {
   }
 }
 
-// ---- Slow-night window banner with a live countdown ----
+// ---- Club Night window banner with a live countdown ----
 let windowTimer = null;
 function untilText(ms) {
   const m = Math.max(0, Math.floor(ms / 60000));
@@ -191,7 +191,7 @@ function renderWindow() {
     const opens = win.opensAt ? Date.parse(win.opensAt) : 0;
     const open = closes && now < closes;
     box.classList.toggle('open', !!open);
-    document.getElementById('window-cap').textContent = open ? 'Rewards are on right now' : 'Rewards unlock on slow nights';
+    document.getElementById('window-cap').textContent = open ? 'Rewards are on right now' : 'Rewards unlock on Club Nights';
     document.getElementById('window-count').textContent = open ? `Open now · ends in ${untilText(closes - now)}`
       : opens && opens > now ? `Next one starts in ${untilText(opens - now)}` : '';
   };
