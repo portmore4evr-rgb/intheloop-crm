@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#5b2ee5">
+<meta name="description" content="Staff page for redeeming Tuesday Club rewards.">
+<meta name="robots" content="noindex">
+<title>Staff · Redeem Reward</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: {
+          paper: '#fff6e6', paper2: '#fff6e6', ink: '#1d1640', inksoft: '#5c5578',
+          amber: '#d81b6a', amberdark: '#b0124f', amberdeep: '#d81b6a', brick: '#d81b6a', line: '#e6dcf7', okgreen: '#0b8a74',
+        },
+        fontFamily: {
+          display: ['Poppins', 'sans-serif'],
+          body: ['Poppins', 'sans-serif'],
+          mono: ['Poppins', 'sans-serif'],
+          code: ['"IBM Plex Mono"', 'monospace'],
+        },
+  } } };
+</script>
+<style>.font-display { font-weight: 800; } body { background-color:#fff6e6; } :focus-visible { outline: 2px solid #ff4d94; outline-offset: 2px; } .font-mono.uppercase { font-weight: 600; }</style>
+</head>
+<body class="font-body text-ink antialiased min-h-screen flex flex-col items-center">
+<div class="w-full max-w-md px-5 pt-8 pb-16">
+  <div class="text-center mb-6">
+    <p class="font-mono text-[11px] uppercase tracking-[0.25em] text-inksoft mb-1">Staff · Redeem a Reward</p>
+    <h1 id="restaurant-name" class="font-display text-4xl">Loading…</h1>
+  </div>
+
+  <div class="bg-paper2 border border-line rounded-[32px] p-6 mb-4">
+    <label class="font-mono text-[11px] uppercase tracking-wider text-inksoft mb-2 block">Guest's Reward ID</label>
+    <input id="reward-input" type="text" autocapitalize="characters" autocomplete="off" placeholder="e.g. MAMA-0007-K3"
+      class="w-full bg-paper border border-line rounded-full px-4 py-3 mb-4 font-code text-xl tracking-wider uppercase focus:outline-none focus:border-amber">
+    <label class="font-mono text-[11px] uppercase tracking-wider text-inksoft mb-2 block">Staff PIN</label>
+    <input id="pin-input" type="password" inputmode="numeric" maxlength="4" placeholder="4 digits"
+      class="w-full bg-paper border border-line rounded-full px-4 py-3 mb-2 font-code text-xl tracking-[0.4em] focus:outline-none focus:border-amber">
+    <label class="flex items-center gap-2 text-xs text-inksoft mb-4"><input id="remember-pin" type="checkbox" class="accent-amber" checked> Remember PIN on this device</label>
+    <button id="btn-redeem" class="w-full bg-amber text-paper2 font-display text-lg py-4 rounded-full hover:bg-amberdark transition">Check &amp; Redeem</button>
+  </div>
+
+  <div id="result" class="hidden rounded-[32px] p-6 text-center"></div>
+  <p class="text-center font-mono text-[10px] text-inksoft mt-8">Powered by Tuesday Club</p>
+</div>
+<script src="/js/redeem.js"></script>
+</body>
+</html>
