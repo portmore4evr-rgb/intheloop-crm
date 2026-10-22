@@ -151,11 +151,11 @@ function passStatus(customer) {
 //   N-0143 = NEW member who joined today (reward starts next visit)
 //   X-0143 = reward already used today
 // The number counts up with every visit at the restaurant. Re-scanning the same day shows the same code.
-//   S-0143 = SAVED: visit counted, but rewards wait for the slow-night window (nothing to give today)
+//   S-0143 = SAVED: visit counted, but rewards wait for the Club Night window (nothing to give today)
 //   W-0143 = WINNER: this guest won the weekly free-meal draw (meal up to the restaurant's cap)
 const SCAN_LETTERS = { reward: 'R', new: 'N', used: 'X', bonus: 'B', saved: 'S', meal: 'W' };
 
-// ---- Slow-night window: rewards and prizes can only be used on these evenings ----
+// ---- Club Night window: rewards and prizes can only be used on these evenings ----
 // Visits on busy nights still count (badges, streaks, draw entries) and their prizes are saved for the window.
 const DEFAULT_REDEEM_DAYS = [1, 2, 3]; // Mon, Tue, Wed
 const DEFAULT_REDEEM_FROM = '17:00';
@@ -229,7 +229,7 @@ function windowInfo(r, now = new Date()) {
   return { label: windowLabel(r), days: w.days, from: w.from, to: w.to, openNow, opensAt, closesAt };
 }
 
-// Prizes and free-meal wins earned outside the window wait in the guest's "bank" until a slow night.
+// Prizes and free-meal wins earned outside the window wait in the guest's "bank" until a Club Night.
 function activeBank(customer) {
   const now = Date.now();
   customer.bank = (customer.bank || []).filter((b) => !b.expiresAt || Date.parse(b.expiresAt) > now);
@@ -358,7 +358,7 @@ function processScan(db, restaurant, customer, visit) {
         if (prize) prizes.push(prize);
       }
     });
-    // Outside the slow-night window the visit still counts, but the reward waits and any prize is saved.
+    // Outside the Club Night window the visit still counts, but the reward waits and any prize is saved.
     let mealDrawId = null;
     let savedPrize = '';
     if (status === 'reward' && !inRedeemWindow(restaurant)) {
@@ -1014,7 +1014,7 @@ app.post('/api/public/checkin', rateLimit('checkin', 40, 10 * 60 * 1000), async 
       subject: `Welcome to ${restaurant.restaurantName}'s Tuesday Club! Here's your member ID`,
       html: `<p>Thanks for joining${customer.name ? ', ' + escHtml(customer.name) : ''}!</p>
         ${restaurant.currentOffer ? `<p>On your <b>next visit</b> you get: <b>${escHtml(restaurant.currentOffer)}</b></p>` : ''}
-        <p>Your rewards are good <b>${escHtml(windowLabel(restaurant))}</b>. Visit any night to earn them, then scan the tag at your table on a slow night and show your server the code.</p>
+        <p>Your rewards are good <b>${escHtml(windowLabel(restaurant))}</b>. Visit any night to earn them, then scan the tag at your table on a Club Night and show your server the code.</p>
         ${drawOn(restaurant) ? `<p>Every day you check in also enters you in the <b>weekly free-meal draw</b> (meal up to $${drawCap(restaurant)}). <a href="${publicBaseUrl()}/rules">Rules</a></p>` : ''}
         <p>Your member ID:</p>${rewardIdBlock(customer)}`,
     });
@@ -1539,9 +1539,9 @@ function buildOwnerReport(db, lead, which) {
     <h2 style="margin:4px 0 4px">${escHtml(lead.restaurantName)}</h2>
     <p style="margin:0 0 18px;color:#5c5578">${escHtml(r.label)}</p>
     <div style="background:#fff1d6;border-radius:16px;padding:18px;margin-bottom:18px">
-      <p style="margin:0;color:#5c5578">Estimated slow-night revenue (${escHtml(windowLabel(lead))})</p>
+      <p style="margin:0;color:#5c5578">Estimated Club Night revenue (${escHtml(windowLabel(lead))})</p>
       <p style="margin:4px 0 0;font-size:34px;font-weight:bold">$${estRevenue.toLocaleString('en-US')}</p>
-      <p style="margin:4px 0 0;font-size:12px;color:#5c5578">${returnVisits} slow-night reward visits × $${avgCheck} average check</p>
+      <p style="margin:4px 0 0;font-size:12px;color:#5c5578">${returnVisits} Club Night reward visits × $${avgCheck} average check</p>
     </div>
     <table style="width:100%;border-collapse:collapse;font-size:15px">
       ${row('New members this month', newSignups)}
@@ -1549,8 +1549,8 @@ function buildOwnerReport(db, lead, which) {
       ${row('Check-ins (scans)', checkins)}
       ${row('First-time guests', firstTimeGuests)}
       ${row('Visits from regulars', regularVisits)}
-      ${row('Busy-night visits that earned a slow-night reward', savedVisits)}
-      ${row('Slow-night visits (rewards used)', returnVisits)}
+      ${row('Visits that earned a Club Night reward', savedVisits)}
+      ${row('Club Night visits (rewards used)', returnVisits)}
       ${row('Different guests who came back', returningGuests)}
       ${row('Bonus prizes used (streaks and milestones)', bonusPrizes)}
       ${row('Free-meal draw entries', drawEntries)}
