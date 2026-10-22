@@ -163,7 +163,7 @@ const DEFAULT_REDEEM_TO = '20:00';
 const BANK_DAYS = 30; // saved prizes and free-meal wins expire after this many days
 const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 function cleanDays(v) {
-  const arr = (Array.isArray(v) ? v : String(v || '').split(',')).map((x) => Number(x)).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
+  const arr = (Array.isArray(v) ? v : String(v || '').split(',')).filter((x) => String(x).trim() !== '').map((x) => Number(x)).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
   return [...new Set(arr)].sort((a, b) => a - b);
 }
 function cleanTime(v) {
@@ -1751,8 +1751,8 @@ async function runDailyBackup(force) {
     await sendEmail({
       to: process.env.BACKUP_EMAIL,
       subject: `Tuesday Club backup ${today} (${(db.leads || []).length} restaurants, ${(db.customers || []).length} guests)`,
-      html: '<p>Your daily Tuesday Club CRM backup is attached. Keep this email: it can rebuild everything if the server data is ever lost.</p>',
-      attachments: [{ filename: `tuesdayclub-backup-${today}.json`, content: raw.toString('base64') }],
+      html: '<p>Your daily Tuesday Club CRM backup is attached. Keep this email: it can rebuild everything if the server data is ever lost. (The file ends in .txt so the email service accepts it; remove the .txt to restore it.)</p>',
+      attachments: [{ filename: `tuesdayclub-backup-${today}.json.txt`, content: raw.toString('base64') }], // Brevo rejects .json attachments; rename to .json to restore
     });
   }
   console.log(`Backup saved: ${file}`);
