@@ -36,7 +36,7 @@
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body { margin: 0; background: var(--cream); color: var(--ink); font-family: var(--font); font-size: 17px; line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
-  img, svg, video { max-width: 100%; }
+  img, svg { max-width: 100%; }
   a { color: var(--grape); }
   :focus-visible { outline: 3px solid var(--pink); outline-offset: 3px; }
   .hidden { display: none !important; }
@@ -156,11 +156,70 @@
   .entries i.on { background: var(--pink); }
   @media (max-width: 920px) { .draw-band .wrap { grid-template-columns: minmax(0, 1fr); } .winner { transform: none; } }
 
-  /* video */
-  .video-frame { border-radius: 34px; overflow: hidden; background: var(--grape); aspect-ratio: 16 / 9; position: relative; box-shadow: 0 20px 44px rgba(61,26,168,.25); max-width: 980px; border: 6px solid #fff; }
-  .video-frame video { width: 100%; height: 100%; object-fit: cover; display: block; }
-  #vsl-missing { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; padding: 32px; color: #fff; background: radial-gradient(circle at 80% 20%, var(--pink), var(--grape) 60%); }
-  #vsl-missing p:first-child { font-size: 32px; font-weight: 800; }
+  /* slide tour (replaces the video) */
+  .tour { position: relative; max-width: 1000px; }
+  .deck { position: relative; border-radius: 34px; overflow: hidden; border: 6px solid #fff; box-shadow: 0 20px 44px rgba(61,26,168,.25); aspect-ratio: 16 / 9; background: var(--grape); }
+  .slide { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 28px; align-items: center; padding: 44px 52px 64px; opacity: 0; visibility: hidden; transition: opacity .45s ease, visibility 0s linear .45s; }
+  .slide.on { opacity: 1; visibility: visible; transition: opacity .45s ease; }
+  .slide.center { grid-template-columns: minmax(0, 1fr); text-align: center; justify-items: center; }
+  .slide .k { font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 8px; }
+  .slide h3 { font-size: clamp(26px, 4vw, 46px); line-height: 1.04; margin-bottom: 12px; }
+  .slide p.t { font-size: clamp(15px, 1.7vw, 19px); max-width: 30em; }
+  .s-grape { background: var(--grape); color: #fff; } .s-grape .k { color: var(--sun); } .s-grape p.t { color: #e8e2ff; }
+  .s-ink { background: var(--ink); color: #fff; } .s-ink .k { color: var(--mint); } .s-ink p.t { color: #cfc8ee; }
+  .s-cream { background: var(--cream); color: var(--ink); } .s-cream .k { color: var(--pink-deep); } .s-cream p.t { color: var(--muted); }
+  .s-sun { background: var(--sun); color: var(--ink); } .s-sun .k { color: var(--grape); } .s-sun p.t { color: #3b3460; }
+  .s-teal { background: var(--teal); color: #fff; } .s-teal .k { color: var(--sun); } .s-teal p.t { color: #e3fbf5; }
+  .s-pink { background: var(--pink-deep); color: #fff; } .s-pink .k { color: var(--sun); } .s-pink p.t { color: #ffe3ef; }
+  .s-grape::before, .s-pink::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .9;
+    background: radial-gradient(circle at 8% 14%, var(--sun) 0 7px, transparent 8px), radial-gradient(circle at 92% 12%, var(--pink) 0 10px, transparent 11px), radial-gradient(circle at 88% 86%, var(--mint) 0 7px, transparent 8px), radial-gradient(circle at 6% 88%, var(--tangerine) 0 6px, transparent 7px); }
+  .s-pink::before { background: radial-gradient(circle at 8% 14%, var(--sun) 0 7px, transparent 8px), radial-gradient(circle at 92% 12%, #fff 0 5px, transparent 6px), radial-gradient(circle at 88% 86%, var(--mint) 0 7px, transparent 8px); }
+  .slide > * { position: relative; }
+  .vis { display: flex; justify-content: center; align-items: center; }
+  .phone-s { width: 210px; background: #fff; border-radius: 28px; padding: 12px; box-shadow: 0 18px 40px rgba(20,8,70,.3); color: var(--ink); text-align: center; transform: rotate(3deg); }
+  .phone-s .scr { border-radius: 20px; padding: 16px 10px; }
+  .phone-s .scr b { display: block; font-size: 26px; line-height: 1.05; }
+  .phone-s .scr .code { font-family: var(--mono); font-size: 28px; margin: 6px 0 2px; }
+  .phone-s .scr small { font-size: 12px; }
+  .phone-s .foot { font-size: 11px; color: var(--muted); margin-top: 8px; }
+  .tables { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; width: 100%; max-width: 380px; }
+  .night { background: rgba(255,255,255,.08); border-radius: 20px; padding: 14px; }
+  .night b { display: block; font-size: 15px; margin-bottom: 10px; }
+  .night .room { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .night .room i { aspect-ratio: 1; border-radius: 6px; background: rgba(255,255,255,.14); }
+  .night .room i.full { background: var(--pink); }
+  .tag { width: 190px; height: 190px; border-radius: 50%; background: var(--grape); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #fff; box-shadow: 0 18px 40px rgba(61,26,168,.3); position: relative; }
+  .tag .q { width: 84px; height: 84px; border-radius: 12px; background: #fff; padding: 8px; }
+  .tag .q i { display: block; width: 100%; height: 100%; background: conic-gradient(from 90deg at 30% 30%, var(--ink) 25%, transparent 0) 0 0 / 14px 14px; border-radius: 3px; }
+  .tag b { font-size: 14px; }
+  .wave { position: absolute; border: 3px solid var(--pink); border-radius: 50%; opacity: .5; }
+  .owner { width: 100%; max-width: 330px; background: #fff; color: var(--ink); border-radius: 22px; padding: 18px; box-shadow: 0 18px 40px rgba(20,8,70,.18); text-align: left; }
+  .owner small { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--pink-deep); }
+  .owner .row { display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 7px 0; font-size: 14px; }
+  .owner .row:last-child { border-bottom: 0; }
+  .owner .row b { font-weight: 800; }
+  .owner .row { align-items: center; gap: 12px; }
+  .owner .bar { display: block; height: 8px; width: 90px; border-radius: 99px; background: linear-gradient(90deg, var(--grape) 70%, var(--line) 70%); flex-shrink: 0; }
+  .deck-ui { position: absolute; left: 0; right: 0; bottom: 14px; display: flex; align-items: center; justify-content: center; gap: 10px; z-index: 3; }
+  .deck-ui button { border: 0; cursor: pointer; font: inherit; }
+  .nav-btn { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.92); color: var(--ink); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
+  .dots { display: flex; gap: 6px; background: rgba(29,22,64,.35); padding: 8px 10px; border-radius: 999px; }
+  .dots button { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,.5); padding: 0; }
+  .dots button[aria-current="true"] { background: #fff; width: 24px; border-radius: 99px; }
+  .tour-note { color: var(--muted); font-size: 14px; margin-top: 12px; }
+  @media (max-width: 760px) {
+    .deck { aspect-ratio: 3 / 4; border-radius: 26px; }
+    .slide { grid-template-columns: minmax(0, 1fr); align-content: center; gap: 14px; padding: 22px 20px 78px; text-align: center; justify-items: center; }
+    .slide h3 { font-size: 25px; margin-bottom: 8px; }
+    .slide p.t { font-size: 14px; line-height: 1.5; }
+    .phone-s { width: 150px; padding: 8px; border-radius: 22px; transform: none; } .phone-s .scr { padding: 10px 8px; border-radius: 16px; } .phone-s .scr b { font-size: 18px; } .phone-s .scr .code { font-size: 19px; margin: 3px 0 0; } .phone-s .scr small { font-size: 11px; line-height: 1.3; display: block; } .phone-s .foot { display: none; }
+    .tag { width: 116px; height: 116px; } .tag .q { width: 52px; height: 52px; padding: 6px; } .tag b { font-size: 12px; } .wave { display: none; }
+    .night { padding: 10px; } .night b { font-size: 13px; margin-bottom: 6px; }
+    .owner { padding: 14px; } .owner .row { font-size: 13px; padding: 5px 0; }
+    .tables { gap: 10px; }
+  }
+  @media (max-width: 380px) { .vis { display: none; } }
+  @media (prefers-reduced-motion: reduce) { .slide, .slide.on { transition: none; } }
 
   /* features */
   .features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
@@ -352,21 +411,96 @@
   </div>
 </section>
 
-<!-- VIDEO -->
-<section>
+<!-- TOUR (slides replace the video) -->
+<section id="tour">
   <div class="wrap">
     <div class="section-head">
       <p class="eyebrow">See it in action</p>
       <h2>The 60-second tour.</h2>
     </div>
-    <div class="video-frame">
-      <video id="vsl" controls playsinline preload="metadata" poster="/media/media/intheloop-vsl-poster.jpg" aria-label="Explainer video: how guests tap a table sticker, earn rewards and build streaks, about one minute" title="How it works">
-        <source src="/media/media/intheloop-vsl.mp4" type="video/mp4">
-      </video>
-      <div id="vsl-missing" class="hidden">
-        <p>Video coming soon</p>
-        <p>Book a meeting below and we'll show you live.</p>
+    <div class="tour" role="region" aria-roledescription="carousel" aria-label="How Tuesday Club works">
+      <div class="deck" id="deck">
+        <div class="slide s-grape on" role="group" aria-roledescription="slide" aria-label="1 of 8">
+          <div>
+            <p class="k">Tuesday Club</p>
+            <h3>Turn your Tuesdays into Fridays.</h3>
+            <p class="t">A one-minute tour of how a tap on the table fills your slow nights.</p>
+          </div>
+          <div class="vis"><div class="phone-s"><div class="scr" style="background:var(--grape);color:#fff"><b>FREE MEAL</b><p class="code">W-0203</p><small>You won the weekly draw!</small></div><p class="foot">Tuesday, 6:12pm</p></div></div>
+        </div>
+        <div class="slide s-ink" role="group" aria-roledescription="slide" aria-label="2 of 8" aria-hidden="true">
+          <div>
+            <p class="k">The problem</p>
+            <h3>Friday is full. Tuesday is empty.</h3>
+            <p class="t">Same rent, same staff, far fewer tickets. Discounts on a busy night just give away money you'd make anyway.</p>
+          </div>
+          <div class="vis"><div class="tables" aria-hidden="true">
+            <div class="night"><b>Friday</b><div class="room"><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i><i class="full"></i></div></div>
+            <div class="night"><b>Tuesday</b><div class="room"><i class="full"></i><i class="full"></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+          </div></div>
+        </div>
+        <div class="slide s-cream" role="group" aria-roledescription="slide" aria-label="3 of 8" aria-hidden="true">
+          <div>
+            <p class="k">Step 1</p>
+            <h3>Guests tap the table.</h3>
+            <p class="t">A sticker on every table holds a tap tag and a QR code. Guests join once with their name and number. No app to download.</p>
+          </div>
+          <div class="vis"><div class="tag" aria-hidden="true"><span class="wave" style="width:230px;height:230px"></span><span class="wave" style="width:270px;height:270px;opacity:.25"></span><div class="q"><i></i></div><b>Tap or scan</b></div></div>
+        </div>
+        <div class="slide s-sun" role="group" aria-roledescription="slide" aria-label="4 of 8" aria-hidden="true">
+          <div>
+            <p class="k">Step 2 · Busy night</p>
+            <h3>Friday visit? It's saved.</h3>
+            <p class="t">The visit counts toward streaks and prizes, but the reward waits for a slow night. Your server sees yellow: nothing to give.</p>
+          </div>
+          <div class="vis"><div class="phone-s"><div class="scr" style="background:var(--sun)"><b>SAVED!</b><p class="code">S-0142</p><small>Reward saved for Mon–Wed</small></div><p class="foot">Friday, 7:40pm</p></div></div>
+        </div>
+        <div class="slide s-teal" role="group" aria-roledescription="slide" aria-label="5 of 8" aria-hidden="true">
+          <div>
+            <p class="k">Step 3 · Slow night</p>
+            <h3>Tuesday visit? Cash in.</h3>
+            <p class="t">Rewards unlock on the nights and hours you choose, with a minimum order, so every reward comes with a real check.</p>
+          </div>
+          <div class="vis"><div class="phone-s"><div class="scr" style="background:var(--teal);color:#fff"><b>REWARD</b><p class="code">R-0187</p><small>Free knots with a $15+ order</small></div><p class="foot">Tuesday, 6:05pm</p></div></div>
+        </div>
+        <div class="slide s-grape" role="group" aria-roledescription="slide" aria-label="6 of 8" aria-hidden="true">
+          <div>
+            <p class="k">Every week</p>
+            <h3>One lucky table eats free.</h3>
+            <p class="t">Every check-in is an entry. Each Monday one guest wins their meal, up to a cap you set, and claims it on a slow night.</p>
+          </div>
+          <div class="vis"><div class="phone-s"><div class="scr" style="background:var(--pink-deep);color:#fff"><b>YOU WON!</b><p class="code">W-0203</p><small>Your meal is on us, up to $40</small></div><p class="foot">Picked Monday, 9am</p></div></div>
+        </div>
+        <div class="slide s-cream" role="group" aria-roledescription="slide" aria-label="7 of 8" aria-hidden="true">
+          <div>
+            <p class="k">Your results</p>
+            <h3>You see it work.</h3>
+            <p class="t">A private results page and a monthly report show your slow-night visits and what they're worth. The guest list is yours to keep.</p>
+          </div>
+          <div class="vis"><div class="owner" aria-hidden="true">
+            <small>Your slow nights this month</small>
+            <div class="row"><span>Slow-night visits</span><i class="bar"></i></div>
+            <div class="row"><span>Estimated revenue</span><i class="bar"></i></div>
+            <div class="row"><span>Free-meal draw entries</span><i class="bar"></i></div>
+            <div class="row"><span>New club members</span><i class="bar"></i></div>
+          </div></div>
+        </div>
+        <div class="slide s-pink center" role="group" aria-roledescription="slide" aria-label="8 of 8" aria-hidden="true">
+          <div>
+            <p class="k">Try it free</p>
+            <h3>30 days, on us.</h3>
+            <p class="t" style="margin:0 auto 22px">We set up your stickers, slow-night hours, prizes and weekly draw. You see your Tuesdays change before you pay anything.</p>
+            <a href="#book" class="btn btn-main" style="background:var(--sun);color:var(--ink);box-shadow:0 6px 0 #c99412">Book a meeting →</a>
+          </div>
+        </div>
+        <div class="deck-ui">
+          <button type="button" class="nav-btn" id="deck-prev" aria-label="Previous slide"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div class="dots" id="deck-dots"></div>
+          <button type="button" class="nav-btn" id="deck-play" aria-label="Pause the tour"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+          <button type="button" class="nav-btn" id="deck-next" aria-label="Next slide"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
+        </div>
       </div>
+      <p class="tour-note">Plays on its own. Use the arrows, dots or swipe to move at your own pace.</p>
     </div>
   </div>
 </section>
