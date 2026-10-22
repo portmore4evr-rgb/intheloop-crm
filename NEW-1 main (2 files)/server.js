@@ -526,7 +526,7 @@ app.get('/unsubscribe/:token', (req, res) => {
     if (!me.email) me.emailOptOut = true;
     writeDB(db);
   }
-  res.send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
+  res.send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unsubscribed · Tuesday Club</title><link rel="icon" href="/favicon.svg?v=4" type="image/svg+xml"><link rel="icon" href="/favicon-32.png?v=4" sizes="32x32" type="image/png"><link rel="shortcut icon" href="/favicon.ico?v=4"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=4">
     <body style="font-family:Arial,sans-serif;background:#fff1d6;color:#1d1640;text-align:center;padding:60px 20px">
     <h2>You're unsubscribed</h2><p>You won't get any more emails from us. Your Reward ID still works in the restaurant.</p></body>`);
 });
@@ -786,7 +786,7 @@ app.get('/owner/:token', rateLimit('owner', 60, 10 * 60 * 1000), (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escHtml(lead.restaurantName)} · Tuesday Club results</title><meta name="robots" content="noindex">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="/favicon.svg?v=4" type="image/svg+xml"><link rel="icon" href="/favicon-32.png?v=4" sizes="32x32" type="image/png"><link rel="shortcut icon" href="/favicon.ico?v=4"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=4">
 </head><body style="margin:0;background:#fff6e6;color:#1d1640;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif">
 <header style="background:#5b2ee5;color:#fff1d6;padding:20px 16px"><div style="max-width:640px;margin:0 auto">
 <div style="font-weight:800;letter-spacing:.06em;font-size:14px">TUESDAY<span style="color:#ffc83d"> CLUB</span></div>
@@ -1585,7 +1585,7 @@ app.get('/api/leads/:id/report', (req, res) => {
   const lead = db.leads.find((l) => l.id === req.params.id);
   if (!lead) return res.status(404).send('Not found');
   const { html } = buildOwnerReport(db, lead, req.query.period === 'last' ? 'last' : 'current');
-  res.send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="background:#fff6e6;padding:24px">${html}</body>`);
+  res.send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Owner report preview · Tuesday Club</title><link rel="icon" href="/favicon.svg?v=4" type="image/svg+xml"><link rel="icon" href="/favicon-32.png?v=4" sizes="32x32" type="image/png"><link rel="shortcut icon" href="/favicon.ico?v=4"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=4"><body style="background:#fff6e6;padding:24px">${html}</body>`);
 });
 
 // CRM: send now
