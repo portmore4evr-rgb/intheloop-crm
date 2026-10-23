@@ -305,10 +305,8 @@ function openModal(id) {
     document.getElementById('f-drawCap').value = lead.drawCap || '';
     PRIZE_KEYS.forEach((k) => { document.getElementById(`f-prize${k}`).value = lead[`prize${k}`] || ''; });
     document.getElementById('f-notes').value = lead.notes || '';
-    document.getElementById('f-staffPin').value = lead.staffPin || '';
-    document.getElementById('redeem-link-display').textContent = `${window.location.origin}/redeem/${lead.id}`;
-    document.getElementById('staff-pin-display').textContent = lead.staffPin || '—';
-    document.getElementById('reward-code-display').textContent = (lead.rewardCode || '') + '-';
+    document.getElementById('f-baselineWeekly').value = lead.baselineWeekly || '';
+    document.getElementById('min-order-display').textContent = lead.minSpend ? `$${lead.minSpend}+` : 'any';
     deleteBtn.classList.remove('hidden');
 
     const liveSinceEl = document.getElementById('live-since-display');
@@ -409,8 +407,7 @@ async function saveLead() {
     ...Object.fromEntries(PRIZE_KEYS.map((k) => [`prize${k}`, document.getElementById(`f-prize${k}`).value.trim()])),
     notes: document.getElementById('f-notes').value,
   };
-  const pin = document.getElementById('f-staffPin').value.trim();
-  if (/^\d{4}$/.test(pin)) payload.staffPin = pin;
+  payload.baselineWeekly = document.getElementById('f-baselineWeekly').value.trim();
 
   if (id) {
     await fetch(`/api/leads/${id}`, {
@@ -535,7 +532,7 @@ function setLogoUI(lead) {
   img.classList.toggle('hidden', !url); empty.classList.toggle('hidden', !!url); remove.classList.toggle('hidden', !url);
   if (url) img.src = url; else img.removeAttribute('src');
   document.getElementById('f-logo').disabled = !lead;
-  status.textContent = lead ? 'PNG, JPG or WEBP, up to 2 MB. Shows on the guest page.' : 'Save the restaurant first, then add its logo.';
+  status.textContent = lead ? 'PNG, JPG or WEBP, up to 2 MB. Shows on the guest page, the prize screen and guest emails. A square logo on a white or clear background looks best.' : 'Save the restaurant first, then add its logo.';
 }
 document.getElementById('f-logo').addEventListener('change', (e) => {
   const file = e.target.files && e.target.files[0];
@@ -551,7 +548,7 @@ document.getElementById('f-logo').addEventListener('change', (e) => {
     const v = Number((data.logoUrl || '').split('v=')[1]) || Date.now();
     logoLead.logoFile = 'set'; logoLead.logoVersion = v;
     setLogoUI(logoLead);
-    document.getElementById('logo-status').textContent = 'Logo saved. Guests will see it on the check-in page.';
+    document.getElementById('logo-status').textContent = 'Logo saved. Guests now see it on their screen and in emails.';
   };
   reader.readAsDataURL(file);
   e.target.value = '';
