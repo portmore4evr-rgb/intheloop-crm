@@ -576,6 +576,7 @@ app.post('/api/leads', (req, res) => {
     drawEnabled: req.body.drawEnabled !== false,
     drawCap: cleanMoney(req.body.drawCap),
     baselineWeekly: cleanAmount(req.body.baselineWeekly),
+    ownerPin: cleanOwnerPin(req.body.ownerPin),
     prize2: req.body.prize2 || '',
     prize3: req.body.prize3 || '',
     prize5: req.body.prize5 || '',
@@ -620,6 +621,7 @@ app.put('/api/leads/:id', (req, res) => {
   if (body.drawEnabled !== undefined) body.drawEnabled = body.drawEnabled !== false;
   if (body.drawCap !== undefined) body.drawCap = cleanMoney(body.drawCap);
   if (body.baselineWeekly !== undefined) body.baselineWeekly = cleanAmount(body.baselineWeekly);
+  if (body.ownerPin !== undefined) body.ownerPin = cleanOwnerPin(body.ownerPin);
   delete body.bank;
   if (body.staffPin !== undefined && !/^\d{4}$/.test(String(body.staffPin))) delete body.staffPin;
   const updated = {
@@ -655,6 +657,21 @@ app.get('/api/leads/:id/customers', (req, res) => {
       lastVisitLabel: VISIT_TYPES[c.lastVisitType] || '',
     }));
   res.json(customers);
+});
+
+// Delete one guest for good (privacy requests, test sign-ups). Removes their visits and messages;
+// past redemptions stay in the totals but no longer point to the person.
+app.delete('/api/leads/:id/customers/:customerId', (req, res) => {
+  const db = readDB();
+  const c = db.customers.find((x) => x.id === req.params.customerId && x.restaurantId === req.params.id);
+  if (!c) return res.status(404).json({ error: 'Guest not found' });
+  db.customers = db.customers.filter((x) => x.id !== c.id);
+  db.visits = db.visits.filter((v) => v.customerId !== c.id);
+  db.messages = db.messages.filter((m) => m.customerId !== c.id);
+  db.redemptions.forEach((r) => { if (r.customerId === c.id) { r.customerId = null; r.rewardIdEntered = 'deleted'; delete r.name; delete r.phone; } });
+  db.draws.forEach((d) => { if (d.winnerId === c.id) { d.winnerId = null; d.winnerName = 'Removed guest'; } });
+  writeDB(db);
+  res.json({ ok: true });
 });
 
 // Guest list export (CSV opens in Excel, Numbers or Google Sheets).
@@ -761,10 +778,49 @@ app.post('/api/leads/:id/owner-link/reset', (req, res) => {
   writeDB(db);
   res.json({ url: ownerUrl(lead) });
 });
+// Optional owner PIN (4-6 digits, set in the CRM). The link alone is no longer enough when a PIN is set.
+function cleanOwnerPin(v) { const t = String(v == null ? '' : v).trim(); return /^\d{4,6}$/.test(t) ? t : ''; }
+const ownerPinKey = (lead) => crypto.createHash('sha256').update(`${lead.ownerToken}:${lead.ownerPin}:${process.env.ADMIN_PASSWORD || 'tc'}`).digest('base64url').slice(0, 32);
+const ownerCookieName = (lead) => `tc_owner_${String(lead.id).replace(/[^a-zA-Z0-9]/g, '').slice(0, 12)}`;
+function readCookie(req, name) {
+  const m = String(req.headers.cookie || '').split(/;\s*/).find((p) => p.startsWith(name + '='));
+  return m ? decodeURIComponent(m.slice(name.length + 1)) : '';
+}
+const ownerUnlocked = (req, lead) => !lead.ownerPin || readCookie(req, ownerCookieName(lead)) === ownerPinKey(lead);
+function ownerPinPage(lead, wrong) {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escHtml(lead.restaurantName)} · Tuesday Club results</title><meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.svg?v=4" type="image/svg+xml"><link rel="icon" href="/favicon-32.png?v=4" sizes="32x32" type="image/png"><link rel="shortcut icon" href="/favicon.ico?v=4"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=4">
+</head><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#fff6e6;color:#1d1640;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;padding:16px;box-sizing:border-box">
+<form method="post" action="/owner/${encodeURIComponent(lead.ownerToken)}/pin" style="background:#fff;border:1px solid #ece4f7;border-radius:22px;padding:26px 22px;max-width:340px;width:100%;text-align:center;box-shadow:0 10px 30px rgba(61,26,168,.08)">
+<div style="font-weight:800;letter-spacing:.06em;font-size:14px;color:#5b2ee5">TUESDAY<span style="color:#d81b6a"> CLUB</span></div>
+${lead.logoFile ? `<img src="${logoUrl(lead)}" alt="" style="display:block;max-height:64px;max-width:180px;margin:14px auto 0;border-radius:10px">` : ''}
+<h1 style="font-size:20px;margin:14px 0 4px">${escHtml(lead.restaurantName)}</h1>
+<p style="margin:0 0 16px;color:#5c5578">Enter your PIN to see your results.</p>
+<input name="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="current-password" autofocus required aria-label="PIN"
+ style="width:100%;box-sizing:border-box;font-size:26px;letter-spacing:10px;text-align:center;padding:12px;border:2px solid #ece4f7;border-radius:14px">
+${wrong ? '<p style="color:#d81b6a;margin:10px 0 0;font-weight:700">That PIN didn\'t match. Try again.</p>' : ''}
+<button style="margin-top:16px;width:100%;padding:13px;border:0;border-radius:999px;background:#5b2ee5;color:#fff;font-weight:800;font-size:16px">Open</button>
+<p style="margin:14px 0 0;font-size:12px;color:#5c5578">Forgot it? Ask your Tuesday Club contact.</p></form></body></html>`;
+}
+app.post('/owner/:token/pin', rateLimit('ownerpin', 10, 15 * 60 * 1000), express.urlencoded({ extended: false, limit: '2kb' }), (req, res) => {
+  const db = readDB();
+  const lead = leadByOwnerToken(db, req.params.token);
+  if (!lead) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  const base = `/owner/${encodeURIComponent(lead.ownerToken)}`;
+  if (!lead.ownerPin) return res.redirect(303, base);
+  const given = String((req.body && req.body.pin) || '').trim();
+  const ok = given.length === lead.ownerPin.length && crypto.timingSafeEqual(Buffer.from(given), Buffer.from(lead.ownerPin));
+  if (!ok) { res.set('Cache-Control', 'no-store'); return res.status(401).send(ownerPinPage(lead, true)); }
+  const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  res.set('Set-Cookie', `${ownerCookieName(lead)}=${ownerPinKey(lead)}; Path=${base}; Max-Age=${90 * 24 * 3600}; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`);
+  res.redirect(303, base);
+});
 app.get('/owner/:token/guests.csv', rateLimit('owner', 60, 10 * 60 * 1000), (req, res) => {
   const db = readDB();
   const lead = leadByOwnerToken(db, req.params.token);
   if (!lead) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  if (!ownerUnlocked(req, lead)) return res.redirect(303, `/owner/${encodeURIComponent(lead.ownerToken)}`);
   sendCsv(res, lead, guestCsv(db, lead));
 });
 function ownerDrawBox(db, lead) {
@@ -785,6 +841,7 @@ app.get('/owner/:token', rateLimit('owner', 60, 10 * 60 * 1000), (req, res) => {
   const db = readDB();
   const lead = leadByOwnerToken(db, req.params.token);
   if (!lead) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  if (!ownerUnlocked(req, lead)) { res.set('Cache-Control', 'no-store'); return res.send(ownerPinPage(lead, false)); }
   const which = req.query.period === 'last' ? 'last' : 'current';
   const { html } = buildOwnerReport(db, lead, which);
   const members = db.customers.filter((c) => c.restaurantId === lead.id).length;
@@ -1794,7 +1851,7 @@ async function runDailyBackup(force) {
       to: process.env.BACKUP_EMAIL,
       subject: `Tuesday Club backup ${today} (${(db.leads || []).length} restaurants, ${(db.customers || []).length} guests)`,
       html: '<p>Your daily Tuesday Club CRM backup is attached. Keep this email: it can rebuild everything if the server data is ever lost. (The file ends in .txt so the email service accepts it; remove the .txt to restore it.)</p>',
-      attachments: [{ filename: `tuesdayclub-backup-${today}.json.txt`, content: raw.toString('base64') }], // Brevo rejects .json attachments; rename to .json to restore
+      attachments: [{ filename: `tuesdayclub-backup-${today}.txt`, content: raw.toString("base64") }], // Brevo rejects .json attachments; rename the file to .json to restore
     });
   }
   console.log(`Backup saved: ${file}`);
