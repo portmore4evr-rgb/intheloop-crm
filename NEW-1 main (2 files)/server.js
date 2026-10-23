@@ -464,7 +464,12 @@ function sendPage(res, file, { analytics = false } = {}) {
 const PUBLIC_PREFIXES = ['/unsubscribe/', '/welcome', '/media/', '/js/welcome.js', '/js/confetti.js', '/checkin/', '/redeem/', '/api/public/', '/api/sms/inbound', '/js/checkin.js', '/js/redeem.js', '/favicon', '/apple-touch-icon.png', '/privacy', '/terms', '/robots.txt', '/sitemap.xml', '/owner/', '/logo/', '/rules'];
 app.use((req, res, next) => {
   const pass = process.env.ADMIN_PASSWORD;
-  if (!pass || PUBLIC_PREFIXES.some((p) => req.path.startsWith(p))) return next();
+  // Only the CRM itself and its data APIs need the password; every other address is public
+  // (so a mistyped link shows the friendly 404 page instead of a login box).
+  const p0 = req.path;
+  const isAdmin = p0 === '/' || p0 === '/index.html' || p0 === '/js/app.js'
+    || (p0.startsWith('/api/') && !PUBLIC_PREFIXES.some((p) => p0.startsWith(p)));
+  if (!pass || !isAdmin) return next();
   const header = req.headers.authorization || '';
   const [, encoded] = header.split(' ');
   const decoded = encoded ? Buffer.from(encoded, 'base64').toString() : '';
@@ -511,9 +516,9 @@ app.get('/sitemap.xml', (req, res) => {
 </urlset>`);
 });
 
-// Staff-only redeem page (protected by the restaurant's 4-digit staff PIN): /redeem/<restaurantId>
+// The staff redeem page is retired: the guest's phone screen is the redemption. Old links go to the guest page.
 app.get('/redeem/:restaurantId', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'redeem.html'));
+  res.redirect(302, `/checkin/${encodeURIComponent(req.params.restaurantId)}`);
 });
 
 // One-click email unsubscribe (link in every guest email)
@@ -570,6 +575,7 @@ app.post('/api/leads', (req, res) => {
     redeemTo: cleanTime(req.body.redeemTo),
     drawEnabled: req.body.drawEnabled !== false,
     drawCap: cleanMoney(req.body.drawCap),
+    baselineWeekly: cleanAmount(req.body.baselineWeekly),
     prize2: req.body.prize2 || '',
     prize3: req.body.prize3 || '',
     prize5: req.body.prize5 || '',
@@ -613,6 +619,7 @@ app.put('/api/leads/:id', (req, res) => {
   if (body.redeemTo !== undefined) body.redeemTo = cleanTime(body.redeemTo);
   if (body.drawEnabled !== undefined) body.drawEnabled = body.drawEnabled !== false;
   if (body.drawCap !== undefined) body.drawCap = cleanMoney(body.drawCap);
+  if (body.baselineWeekly !== undefined) body.baselineWeekly = cleanAmount(body.baselineWeekly);
   delete body.bank;
   if (body.staffPin !== undefined && !/^\d{4}$/.test(String(body.staffPin))) delete body.staffPin;
   const updated = {
@@ -850,6 +857,11 @@ function publicBaseUrl() {
 }
 
 // Minimum order to redeem: a whole-dollar amount, or null for no minimum.
+// Whole-dollar amounts with no small cap (weekly sales figures).
+function cleanAmount(v) {
+  const n = Math.round(Number(String(v ?? '').replace(/[^0-9.]/g, '')));
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 10000000) : null;
+}
 function cleanMoney(v) {
   const n = Math.round(Number(String(v ?? '').replace(/[^0-9.]/g, '')));
   return Number.isFinite(n) && n > 0 ? Math.min(n, 500) : null;
@@ -883,6 +895,7 @@ function guestEmailHtml(restaurant, customer, bodyHtml) {
   const unsub = `${publicBaseUrl()}/unsubscribe/${customer.deviceToken}`;
   const address = process.env.BUSINESS_ADDRESS ? `<br>${escHtml(process.env.BUSINESS_ADDRESS)}` : '';
   return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#1d1640">
+    ${restaurant.logoFile ? `<img src="${publicBaseUrl()}${logoUrl(restaurant)}" alt="${escHtml(restaurant.restaurantName)}" style="display:block;max-height:64px;max-width:200px;margin:0 0 10px">` : ''}
     <h2 style="margin:0 0 12px">${escHtml(restaurant.restaurantName)}</h2>
     ${bodyHtml}
     <p style="font-size:11px;color:#8a8175;margin-top:28px;border-top:1px solid #e6dccb;padding-top:10px">
@@ -1151,45 +1164,8 @@ async function notifyBooking(lead, when) {
 // Staff redeem: requires the restaurant's staff PIN + the guest's Reward ID.
 // A redemption counts as a RETURN visit, so it isn't allowed on the day they signed up,
 // and only once per guest per day.
-app.post('/api/public/redeem', rateLimit('redeem', 60, 10 * 60 * 1000), (req, res) => {
-  const db = readDB();
-  const { restaurantId } = req.body;
-  const restaurant = db.leads.find((l) => l.id === restaurantId);
-  if (!restaurant) return res.status(404).json({ error: 'Restaurant not found' });
-  ensureRewardFields(restaurant, db);
-  if (String(req.body.pin || '') !== restaurant.staffPin) {
-    return res.status(401).json({ error: 'Wrong staff PIN' });
-  }
-  const entered = String(req.body.rewardId || '').trim().toUpperCase().replace(/\s+/g, '');
-  const log = (result, customer) => {
-    db.redemptions.unshift({
-      id: crypto.randomUUID(), restaurantId, rewardIdEntered: entered, result,
-      customerId: customer ? customer.id : null, at: new Date().toISOString(),
-    });
-    writeDB(db);
-  };
-
-  const customer = db.customers.find((c) => c.restaurantId === restaurantId && c.rewardId === entered);
-  if (!customer) { log('invalid'); return res.status(404).json({ error: `No guest with Reward ID ${entered} at this restaurant` }); }
-
-  const today = localDay(new Date());
-  if (localDay(customer.optedInAt) === today) {
-    log('same_day');
-    return res.status(409).json({ error: 'Signed up today - the reward is for their NEXT visit.', customer: publicCustomer(customer) });
-  }
-  if (!inRedeemWindow(restaurant)) {
-    log('outside_window', customer);
-    return res.status(409).json({ error: `Rewards can only be used ${windowLabel(restaurant)}. The visit still counts on their phone.`, customer: publicCustomer(customer) });
-  }
-  if (customer.lastRedemptionAt && localDay(customer.lastRedemptionAt) === today) {
-    log('already_today');
-    return res.status(409).json({ error: 'Already redeemed today.', customer: publicCustomer(customer) });
-  }
-
-  customer.redemptionCount = (customer.redemptionCount || 0) + 1;
-  customer.lastRedemptionAt = new Date().toISOString();
-  log('valid', customer);
-  res.json({ ok: true, customer: publicCustomer(customer), offer: restaurant.currentOffer, visitNumber: customer.redemptionCount });
+app.post('/api/public/redeem', (req, res) => {
+  res.status(410).json({ error: 'The staff redeem page is no longer used. Guests show the screen on their phone instead.' });
 });
 
 // Owner-side redemption log (CRM)
@@ -1542,6 +1518,7 @@ function buildOwnerReport(db, lead, which) {
       <p style="margin:0;color:#5c5578">Estimated Club Night revenue (${escHtml(windowLabel(lead))})</p>
       <p style="margin:4px 0 0;font-size:34px;font-weight:bold">$${estRevenue.toLocaleString('en-US')}</p>
       <p style="margin:4px 0 0;font-size:12px;color:#5c5578">${returnVisits} Club Night reward visits × $${avgCheck} average check</p>
+      ${Number(lead.baselineWeekly) > 0 ? `<p style="margin:10px 0 0;font-size:13px">Before Tuesday Club, your Club Night hours brought in about <b>$${Number(lead.baselineWeekly).toLocaleString('en-US')} a week</b> (your number). This month, club reward visits were worth about <b>$${Math.round(estRevenue / 4.33).toLocaleString('en-US')} a week</b>.</p>` : ''}
     </div>
     <table style="width:100%;border-collapse:collapse;font-size:15px">
       ${row('New members this month', newSignups)}
@@ -1708,6 +1685,71 @@ app.post('/api/leads/:id/draws/run', async (req, res) => {
   res.json(ran[0]);
 });
 
+// ---- Club Night reminder: on a Club Night, 3 hours before it opens, nudge guests who have something waiting ----
+// "Something waiting" = a saved prize or free meal, or a busy-night visit since their last reward. Max once a week each.
+async function runClubNightReminders() {
+  const db = readDB();
+  const now = new Date();
+  const p = localParts(now);
+  const thisWeek = weekStart(p.day);
+  let sent = 0;
+  for (const r of db.leads) {
+    if (r.stage !== 'Live Client') continue;
+    const w = redeemWindow(r);
+    if (!w.days.includes(p.dow) || p.minutes < toMin(w.from) - 180 || p.minutes >= toMin(w.to)) continue;
+    const when = `tonight ${fmtClock(w.from)}–${fmtClock(w.to)}`;
+    for (const c of db.customers) {
+      if (c.restaurantId !== r.id || c.clubNightReminderWeek === thisWeek || !canMessage(c, r)) continue;
+      if (localDay(c.optedInAt) === p.day) continue;
+      const bank = activeBank(c);
+      const sinceReward = c.lastRedemptionAt || '';
+      const savedVisit = db.visits.some((v) => v.customerId === c.id && v.scanStatus === 'saved' && v.at > sinceReward
+        && Date.parse(v.at) > now.getTime() - 21 * 86400000);
+      if (!bank.length && !savedVisit) continue;
+      const items = bank.map((b) => b.label);
+      if (savedVisit && r.currentOffer) items.unshift(r.currentOffer);
+      const list = items.length ? items.join(' + ') : 'your reward';
+      await notifyGuest(db, r, c, 'club_night_reminder', {
+        preferEmail: true,
+        sms: `It's Club Night at ${r.restaurantName} ${when}! Waiting for you: ${list}. Scan the tag at your table. Reply STOP to opt out.`,
+        subject: `Club Night ${when}: your ${items.length > 1 ? 'rewards are' : 'reward is'} waiting`,
+        html: `<p style="font-size:22px;font-weight:bold;margin:0 0 8px">It's Club Night ${escHtml(when)}!</p>
+          <p>Waiting for you at <b>${escHtml(r.restaurantName)}</b>:</p>
+          <ul>${items.length ? items.map((i) => `<li><b>${escHtml(i)}</b></li>`).join('') : '<li><b>Your reward</b></li>'}</ul>
+          <p>Scan the QR code or tap the tag at your table and show your server the screen.${r.minSpend ? ` Valid with a $${r.minSpend}+ order.` : ''}</p>`,
+      });
+      c.clubNightReminderWeek = thisWeek;
+      sent += 1;
+    }
+  }
+  if (sent) writeDB(db);
+}
+
+// ---- Saved prizes about to expire: one heads-up 5 days before ----
+async function runExpiryWarnings() {
+  const db = readDB();
+  const soon = Date.now() + 5 * 86400000;
+  let sent = 0;
+  for (const c of db.customers) {
+    const due = (c.bank || []).filter((b) => !b.warned && b.expiresAt && Date.parse(b.expiresAt) <= soon && Date.parse(b.expiresAt) > Date.now());
+    if (!due.length) continue;
+    const r = db.leads.find((l) => l.id === c.restaurantId);
+    if (!r || !canMessage(c, r)) { due.forEach((b) => { b.warned = true; }); sent += 1; continue; }
+    const list = due.map((b) => b.label).join(' + ');
+    const by = new Date(Math.min(...due.map((b) => Date.parse(b.expiresAt)))).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: TIMEZONE });
+    await notifyGuest(db, r, c, 'expiry_warning', {
+      preferEmail: true,
+      sms: `Heads up: your ${list} at ${r.restaurantName} expires ${by}. Use it ${windowLabel(r)}. Reply STOP to opt out.`,
+      subject: `Your ${list} at ${r.restaurantName} expires ${by}`,
+      html: `<p>Don't miss it: your <b>${escHtml(list)}</b> at <b>${escHtml(r.restaurantName)}</b> expires <b>${escHtml(by)}</b>.</p>
+        <p>Come in <b>${escHtml(windowLabel(r))}</b> and scan the tag at your table to use it.</p>`,
+    });
+    due.forEach((b) => { b.warned = true; });
+    sent += 1;
+  }
+  if (sent) writeDB(db);
+}
+
 async function runMonthlyReports() {
   const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: TIMEZONE }));
   if (nowLocal.getDate() !== 1 || nowLocal.getHours() < 9) return;
@@ -1759,7 +1801,7 @@ async function runDailyBackup(force) {
 }
 
 async function runScheduledJobs() {
-  for (const job of [runFollowUpCheck, runFirstVisitEmailCheck, runStreakReminders, runReviewRequestCheck, runAutomationCheck, runWeeklyDraws, runMonthlyReports, runDailyBackup]) {
+  for (const job of [runFollowUpCheck, runFirstVisitEmailCheck, runStreakReminders, runReviewRequestCheck, runAutomationCheck, runWeeklyDraws, runClubNightReminders, runExpiryWarnings, runMonthlyReports, runDailyBackup]) {
     try { await job(); } catch (err) { console.error(`Scheduled job ${job.name} failed:`, err.message); }
   }
 }
