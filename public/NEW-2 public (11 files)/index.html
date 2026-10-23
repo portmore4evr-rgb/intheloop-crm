@@ -223,6 +223,9 @@
           <label for="f-baselineWeekly" class="block text-xs font-mono uppercase tracking-wider text-inkmute mt-3 mb-1">Club Night sales before Tuesday Club ($ per week)</label>
           <input id="f-baselineWeekly" type="number" inputmode="numeric" min="0" step="1" placeholder="Ask the owner at setup, e.g. 1200" class="w-full bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
           <span class="block text-xs text-inkmute mt-1">Average of their last 4 weeks on the Club Night hours. Reports show before and after.</span>
+          <label for="f-ownerPin" class="block text-xs font-mono uppercase tracking-wider text-inkmute mt-3 mb-1">Owner page PIN (optional)</label>
+          <input id="f-ownerPin" type="text" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" autocomplete="off" placeholder="4–6 digits · leave blank for link only" class="w-full bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          <span class="block text-xs text-inkmute mt-1">If set, the owner types this once on each phone before their results page opens.</span>
       </div>
       <fieldset class="rounded-3xl bg-[#efe9ff] p-4 space-y-4 border-0">
         <legend class="sr-only">Rewards</legend>
