@@ -220,8 +220,9 @@
       <div>
         <label class="font-mono text-xs uppercase tracking-wider text-inkmute mb-1 block">Google Review Link</label>
         <input id="f-googleReviewLink" type="url" placeholder="https://g.page/your-restaurant/review" class="w-full bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
-          <label class="block text-xs font-mono uppercase tracking-wider text-inkmute mt-3 mb-1">Staff PIN (4 digits)</label>
-          <input id="f-staffPin" type="text" inputmode="numeric" maxlength="4" pattern="\d{4}" class="w-full bg-bg border border-hair rounded-full px-4 py-2 text-sm font-code focus:outline-none focus:border-teal">
+          <label for="f-baselineWeekly" class="block text-xs font-mono uppercase tracking-wider text-inkmute mt-3 mb-1">Club Night sales before Tuesday Club ($ per week)</label>
+          <input id="f-baselineWeekly" type="number" inputmode="numeric" min="0" step="1" placeholder="Ask the owner at setup, e.g. 1200" class="w-full bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
+          <span class="block text-xs text-inkmute mt-1">Average of their last 4 weeks on the Club Night hours. Reports show before and after.</span>
       </div>
       <fieldset class="rounded-3xl bg-[#efe9ff] p-4 space-y-4 border-0">
         <legend class="sr-only">Rewards</legend>
@@ -330,13 +331,8 @@
         </div>
       </div>
 
-      <h3 class="font-display text-xl mb-1">Staff Redeem Page</h3>
-      <p class="text-inkmute text-sm mb-3">Bookmark this on the register tablet/phone. Staff type the guest's Reward ID + this PIN on each return visit.</p>
-      <div class="flex flex-col sm:flex-row gap-2 mb-2">
-        <div id="redeem-link-display" class="flex-1 bg-bg border border-hair rounded-2xl px-3 py-2 font-mono text-xs text-inkmute break-all"></div>
-        <div class="bg-bg border border-hair rounded-full px-4 py-2 text-sm">PIN <span id="staff-pin-display" class="font-code font-semibold text-teal"></span></div>
-      </div>
-      <p class="text-inkmute text-xs mb-6">Reward IDs here start with <span id="reward-code-display" class="font-code"></span>. Change the PIN any time in the Staff PIN field above and save.</p>
+      <h3 class="font-display text-xl mb-1">What servers do</h3>
+      <p class="text-inkmute text-sm mb-6">Nothing to install or type. Green screen + a <span id="min-order-display" class="font-semibold text-ink">$15+</span> ticket = give the reward. Pink = give the prize shown. Purple = free meal up to the cap. Yellow = saved, nothing today. The guest's phone records it by itself.</p>
 
       <h3 class="font-display text-xl mb-1">Customers <span id="customers-count" class="text-inkmute font-body font-normal text-sm"></span></h3>
       <p class="text-inkmute text-sm mb-4">Everyone who's checked in at this restaurant.</p>

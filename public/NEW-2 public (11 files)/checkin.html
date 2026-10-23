@@ -47,6 +47,14 @@
   .hero::after { content: ""; position: absolute; width: 300px; height: 300px; border-radius: 50%; background: var(--grape-deep); right: -110px; bottom: -170px; z-index: -1; }
   .brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; letter-spacing: .02em; background: rgba(255,255,255,.14); padding: 6px 14px 6px 8px; border-radius: 999px; margin-bottom: 18px; }
   .brand .star { width: 22px; height: 22px; border-radius: 7px; background: var(--sun); display: flex; align-items: center; justify-content: center; }
+  .logo-tile { width: 104px; height: 104px; margin: 0 auto 12px; border-radius: 30px; background: #fff; box-shadow: 0 10px 24px rgba(29,22,64,.28); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .logo-tile img { width: 100%; height: 100%; object-fit: contain; padding: 10px; box-sizing: border-box; }
+  #logo-initials { font-size: 36px; font-weight: 800; color: var(--grape); letter-spacing: -.02em; }
+  .hero .brand { margin: 12px 0 0; font-size: 12px; padding: 4px 12px 4px 5px; }
+  .hero .brand .star { width: 18px; height: 18px; border-radius: 6px; }
+  .pass-logo { width: 54px; height: 54px; margin: 0 auto 8px; border-radius: 18px; background: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
+  .pass-logo img { width: 100%; height: 100%; object-fit: contain; padding: 5px; box-sizing: border-box; }
+  #pass-initials { font-size: 19px; font-weight: 800; color: var(--grape); }
   .rest-logo { display: block; margin: 0 auto 14px; max-height: 80px; max-width: 180px; object-fit: contain; border-radius: 18px; background: #fff; padding: 8px; box-shadow: 0 8px 20px rgba(29,22,64,.25); }
   .kicker { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--sun); }
   .hero h1 { font-size: 34px; font-weight: 800; line-height: 1.1; margin-top: 4px; text-wrap: balance; }
@@ -116,6 +124,34 @@
   .s-saved { background: var(--sun); color: var(--ink); }
   .s-saved .what { background: rgba(29,22,64,.08); }
 
+  .winbar { background: var(--grape); color: #fff; border-radius: 24px; padding: 14px 16px; display: flex; gap: 12px; align-items: center; box-shadow: 0 10px 24px rgba(61,26,168,.25); }
+  .winbar .trophy { width: 42px; height: 42px; border-radius: 14px; background: var(--sun); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transform: rotate(-6deg); }
+  .winbar b { display: block; font-size: 16px; font-weight: 800; }
+  .winbar p { font-size: 13px; color: #e4ddff; }
+  .pass .what { margin-top: 2px; }
+  .pass .min { font-size: 13px; font-weight: 600; opacity: .95; margin-top: 6px; }
+  .pass .proof { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; margin-top: 16px; font-family: var(--mono); font-size: 13px; background: rgba(0,0,0,.14); border-radius: 999px; padding: 7px 12px; }
+  .s-saved .proof { background: rgba(29,22,64,.08); }
+  .pass .proof .sep { opacity: .6; }
+  .pass .pcode { font-weight: 600; letter-spacing: .04em; }
+  .legend { display: flex; justify-content: center; gap: 2px; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--muted); padding: 4px 7px; border-radius: 999px; white-space: nowrap; }
+  .legend span.on { background: #fff; color: var(--ink); box-shadow: 0 2px 8px rgba(29,22,64,.12); }
+  .legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .club { padding: 8px 18px; }
+  .club .row { display: flex; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .club .row:last-child { border-bottom: 0; }
+  .club .ic { width: 40px; height: 40px; border-radius: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .club b { display: block; font-size: 15px; font-weight: 700; line-height: 1.3; }
+  .club small { display: block; font-size: 13px; color: var(--muted); }
+  .pips { display: flex; gap: 5px; margin-top: 6px; }
+  .pips i { display: block; flex: 1 1 0; height: 8px; border-radius: 99px; background: #e2d9f3; }
+  .pips i.on { background: #1fd1b0; }
+  .more summary { cursor: pointer; font-weight: 700; color: var(--grape); list-style: none; text-align: center; }
+  .more summary::-webkit-details-marker { display: none; }
+  .more[open] summary { margin-bottom: 14px; }
+  .badges.light b { color: var(--ink); } .badges.light .badge span { color: var(--pink-deep); } .badges.light .badge.off b, .badges.light .badge.off span { color: #9a94b5; }
+  .member { text-align: center; font-size: 12px; color: var(--muted); margin-top: 14px; }
   .bank { background: #fff; border: 2px dashed var(--sun); border-radius: 22px; padding: 14px 16px; }
   .bank small { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
   .bank ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
@@ -175,10 +211,12 @@
 
 <header class="hero">
   <div class="wrap">
-    <span class="brand"><span class="star"><svg width="14" height="14" viewBox="0 0 24 24" fill="#5b2ee5" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg></span>Tuesday Club</span>
-    <img id="restaurant-logo" alt="" class="rest-logo hidden">
-    <p class="kicker">You're in the club at</p>
+    <div class="logo-tile">
+      <img id="restaurant-logo" alt="" class="hidden">
+      <span id="logo-initials" aria-hidden="true"></span>
+    </div>
     <h1 id="restaurant-name">Loading…</h1>
+    <span class="brand"><span class="star"><svg width="12" height="12" viewBox="0 0 24 24" fill="#5b2ee5" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg></span>Tuesday Club rewards</span>
   </div>
 </header>
 
@@ -198,14 +236,14 @@
     <div class="offer">
       <small>Your club reward</small>
       <h2 id="offer-text">—</h2>
-      <p id="offer-note">Join tonight, earn on any visit, and cash it in on a Club Night.</p>
+      <p id="offer-note">Earn it any night. Use it on Club Night.</p>
     </div>
 
     <div id="draw-box" class="draw hidden">
       <div class="plate"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#d81b6a" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 3v8a2 2 0 0 0 2 2v8M9 3v8a2 2 0 0 1-2 2M7 3v6M17 21V3c-2 1-3 4-3 7s1 4 3 4"/></svg></div>
       <div>
         <b id="draw-title">Win your whole meal free</b>
-        <p id="draw-text">Every check-in is an entry in this week's draw.</p>
+        <p id="draw-text">Every check-in = 1 entry.</p>
       </div>
     </div>
 
@@ -237,74 +275,76 @@
     </div>
   </div>
 
-  <!-- STEP 2: TODAY'S CODE (the server reads this screen) -->
+  <!-- STEP 2: TODAY'S SCREEN (the server reads this; live clock + date + daily code stop screenshots) -->
   <div id="step-2" class="step stack">
+    <div id="win-banner" class="winbar hidden" role="status">
+      <span class="trophy" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="#5b2ee5"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg></span>
+      <div><b>You won a free meal!</b><p id="win-text">Claim it on Club Night.</p></div>
+    </div>
+
     <div id="scan-card" class="pass s-reward">
-      <p id="pass-heading" class="head">You're in the club</p>
+      <div class="pass-logo"><img id="pass-logo" alt="" class="hidden"><span id="pass-initials" aria-hidden="true"></span></div>
+      <p id="pass-heading" class="head">Hi there</p>
       <p id="scan-label" class="label">REWARD</p>
       <p id="scan-sub" class="sub">Show this screen to your server</p>
-      <p class="codecap">Today's code</p>
-      <p id="visit-code" class="code">—</p>
-      <div class="clock"><span class="live-dot"></span><span id="live-clock">--:--:--</span></div>
-      <p id="live-date" class="date"></p>
       <h2 id="pass-offer-text" class="what">—</h2>
-    </div>
-
-    <div id="bank-box" class="bank hidden">
-      <small>Saved for your next Club Night</small>
-      <ul id="bank-list"></ul>
-    </div>
-
-    <div id="draw-box-2" class="draw hidden">
-      <div class="plate"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#d81b6a" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 3v8a2 2 0 0 0 2 2v8M9 3v8a2 2 0 0 1-2 2M7 3v6M17 21V3c-2 1-3 4-3 7s1 4 3 4"/></svg></div>
-      <div>
-        <b id="draw-title-2">You're in this week's free-meal draw</b>
-        <p id="draw-text-2"></p>
+      <p id="pass-min" class="min hidden"></p>
+      <div class="proof">
+        <span class="live-dot"></span>
+        <span id="live-clock">--:--:--</span>
+        <span class="sep">·</span>
+        <span id="live-date"></span>
+        <span class="sep">·</span>
+        <span id="visit-code" class="pcode">—</span>
       </div>
     </div>
 
-    <div id="progress-card" class="progress">
-      <div class="streak-row">
-        <div>
-          <small class="cap">Your streak</small>
-          <p><span id="streak-num" class="streak-num">0</span> <span style="font-size:18px;font-weight:700">week streak</span></p>
-        </div>
-        <svg width="44" height="44" viewBox="0 0 24 24" fill="#ffc83d" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
-      </div>
-      <div id="streak-weeks" class="weeks"></div>
-      <p id="streak-msg" class="streak-msg"></p>
-      <div id="next-prize" class="next">
-        <p style="font-size:14px"><span id="next-remaining"></span></p>
-        <b id="next-prize-name"></b>
-        <div class="bar"><i id="next-bar" style="width:0%"></i></div>
-      </div>
-      <p style="margin-top:20px"><small class="cap">Badges</small></p>
-      <div id="badge-grid" class="badges"></div>
+    <div class="legend" aria-label="What the colors mean">
+      <span data-k="reward"><i style="background:#0b8a74"></i>Reward</span>
+      <span data-k="bonus"><i style="background:#d81b6a"></i>Prize</span>
+      <span data-k="meal"><i style="background:#5b2ee5"></i>Free meal</span>
+      <span data-k="saved"><i style="background:#ffc83d"></i>Saved</span>
+      <span data-k="used"><i style="background:#6b6680"></i>Used</span>
     </div>
 
-    <div class="card member">
-      <p id="visit-number" class="num"></p>
-      <p style="font-size:12px;color:var(--muted);margin-top:4px">Member ID <span id="reward-id" class="id">—</span></p>
-      <p id="pass-note" style="font-size:12px;color:var(--muted);margin-top:6px">This phone is remembered: next time just scan, no form.</p>
-      <div class="divider"></div>
-      <div style="text-align:left">
-        <label for="today-visit" class="lbl">What brings you in today?</label>
-        <select id="today-visit" class="field">
-          <option value="" disabled selected>Choose one…</option>
-          <option value="first_time">First time here</option>
-          <option value="regular">I'm a regular</option>
-          <option value="friend">A friend sent me</option>
-          <option value="takeout">Picking up takeout</option>
-          <option value="celebrating">Celebrating something 🎉</option>
-          <option value="social">Saw you on social media</option>
-          <option value="event">Here for an event / game night</option>
-        </select>
-        <button id="today-submit" class="btn" style="margin-bottom:10px">Submit</button>
-        <p id="today-saved" class="ok hidden">Thanks! Saved to your profile.</p>
-        <p id="today-error" class="err hidden"></p>
+    <div class="card club">
+      <div class="row">
+        <span class="ic" style="background:#ffe3ef"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d81b6a" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 3v8a2 2 0 0 0 2 2v8M9 3v8a2 2 0 0 1-2 2M7 3v6M17 21V3c-2 1-3 4-3 7s1 4 3 4"/></svg></span>
+        <div><b id="draw-line">You're in this week's free-meal draw</b><small id="draw-sub">Winner picked Monday</small></div>
       </div>
-      <button id="not-me" class="link">Not you? Use different info</button>
+      <div id="bank-row" class="row hidden">
+        <span class="ic" style="background:#fff1c9"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1d1640" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8c-2-4-6-4-6-1s6 1 6 1zm0 0c2-4 6-4 6-1s-6 1-6 1z"/></svg></span>
+        <div><b>Saved for Club Night</b><small id="bank-list"></small></div>
+      </div>
+      <div id="next-row" class="row">
+        <span class="ic" style="background:#d9f7f0"><svg width="20" height="20" viewBox="0 0 24 24" fill="#0b8a74" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg></span>
+        <div style="flex:1"><b id="next-line">Next prize</b><div id="next-dots" class="pips" aria-hidden="true"></div></div>
+      </div>
+      <div id="streak-row" class="row hidden">
+        <span class="ic" style="background:#efe9ff"><svg width="20" height="20" viewBox="0 0 24 24" fill="#5b2ee5" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span>
+        <div><b id="streak-line"></b><small id="streak-sub"></small></div>
+      </div>
     </div>
+
+    <details class="card more">
+      <summary>My badges &amp; details</summary>
+      <div id="badge-grid" class="badges light"></div>
+      <p class="member"><span id="visit-number"></span> · ID <span id="reward-id" class="id">—</span></p>
+      <label for="today-visit" class="lbl" style="margin-top:14px">Why are you here today? (optional)</label>
+      <select id="today-visit" class="field">
+        <option value="" disabled selected>Choose one…</option>
+        <option value="first_time">First time here</option>
+        <option value="regular">I'm a regular</option>
+        <option value="friend">A friend sent me</option>
+        <option value="takeout">Picking up takeout</option>
+        <option value="celebrating">Celebrating something 🎉</option>
+        <option value="social">Saw you on social media</option>
+        <option value="event">Here for an event / game night</option>
+      </select>
+      <p id="today-saved" class="ok hidden">Saved, thanks!</p>
+      <p id="today-error" class="err hidden"></p>
+      <button id="not-me" class="link">Not you?</button>
+    </details>
   </div>
 
   <!-- STEP 3: KNOWN GUEST, NEW RESTAURANT (one-tap join) -->
@@ -346,7 +386,7 @@
         <svg id="badge-icon" width="52" height="52" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
       </div>
     </div>
-    <p style="font-weight:700;margin-top:22px;color:var(--mint)">New badge</p>
+    <p style="font-weight:700;margin-top:22px;color:var(--mint)">New badge!</p>
     <h2 id="badge-title">3 visits</h2>
     <p id="badge-body" class="body"></p>
     <div id="badge-prize" class="won hidden">
@@ -354,7 +394,7 @@
       <b id="badge-prize-name"></b>
       <p id="badge-prize-note" style="font-size:12px;margin-top:2px">Show your server the pink screen</p>
     </div>
-    <button id="badge-close" class="btn">See my progress</button>
+    <button id="badge-close" class="btn">Got it</button>
   </div>
 </div>
 
