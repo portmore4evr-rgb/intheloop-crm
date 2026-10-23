@@ -306,6 +306,7 @@ function openModal(id) {
     PRIZE_KEYS.forEach((k) => { document.getElementById(`f-prize${k}`).value = lead[`prize${k}`] || ''; });
     document.getElementById('f-notes').value = lead.notes || '';
     document.getElementById('f-baselineWeekly').value = lead.baselineWeekly || '';
+    document.getElementById('f-ownerPin').value = lead.ownerPin || '';
     document.getElementById('min-order-display').textContent = lead.minSpend ? `$${lead.minSpend}+` : 'any';
     deleteBtn.classList.remove('hidden');
 
@@ -354,10 +355,19 @@ async function loadCustomers(restaurantId) {
             ${c.optedOut ? '<span class="text-xs text-brick ml-2">opted out</span>' : ''}
             ${c.firstVisitLabel ? `<div class="text-inkmute text-xs mt-0.5">Joined as: ${escapeHtml(c.firstVisitLabel)}${c.lastVisitLabel && c.lastVisitLabel !== c.firstVisitLabel ? ` · Last visit: ${escapeHtml(c.lastVisitLabel)}` : ''}</div>` : ''}
           </div>
-          <span class="font-mono text-[11px] text-teal text-right">${c.checkinCount || 0} check-in${(c.checkinCount || 0) === 1 ? '' : 's'}<br>${c.redemptionCount || 0} reward${(c.redemptionCount || 0) === 1 ? '' : 's'} used</span>
+          <div class="flex items-center gap-3">
+            <span class="font-mono text-[11px] text-teal text-right">${c.checkinCount || 0} check-in${(c.checkinCount || 0) === 1 ? '' : 's'}<br>${c.redemptionCount || 0} reward${(c.redemptionCount || 0) === 1 ? '' : 's'} used</span>
+            <button type="button" class="btn-del-guest text-xs text-brick border border-hair rounded-full px-2.5 py-1 hover:bg-white" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name || c.phone || 'this guest')}" title="Delete guest">Delete</button>
+          </div>
         </div>
       `).join('')
     : '<p class="text-inkmute text-sm text-center py-4">No customers yet — share the check-in link above.</p>';
+  list.querySelectorAll('.btn-del-guest').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm(`Delete ${b.dataset.name}? This removes them, their visits and their messages for good.`)) return;
+    const r = await fetch(`/api/leads/${restaurantId}/customers/${encodeURIComponent(b.dataset.id)}`, { method: 'DELETE' });
+    if (!r.ok) { alert('Could not delete this guest.'); return; }
+    loadCustomers(restaurantId);
+  }));
 }
 
 async function addCustomer() {
@@ -408,6 +418,9 @@ async function saveLead() {
     notes: document.getElementById('f-notes').value,
   };
   payload.baselineWeekly = document.getElementById('f-baselineWeekly').value.trim();
+  const pin = document.getElementById('f-ownerPin').value.trim();
+  if (pin && !/^\d{4,6}$/.test(pin)) { alert('Owner PIN must be 4 to 6 digits (or blank).'); return; }
+  payload.ownerPin = pin;
 
   if (id) {
     await fetch(`/api/leads/${id}`, {
