@@ -284,6 +284,32 @@
         </div>
         <div>
           <p class="font-mono text-[11px] uppercase tracking-wider text-amberdeep mb-2">Minimum order to redeem</p>
+          <details id="moc" class="rounded-2xl border border-hair bg-bg p-3 mb-3">
+            <summary class="cursor-pointer text-sm font-semibold text-ink">Work it out for me <span class="font-normal text-inkmute">(minimum order calculator)</span></summary>
+            <div class="mt-3 space-y-3">
+              <div>
+                <span class="block text-xs text-inkmute mb-1">Type of place</span>
+                <div id="moc-tiers" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label class="min-w-0 block"><span class="text-sm font-semibold block mb-1">Average check per guest ($)</span>
+                  <span class="block text-xs text-inkmute mb-1">Sales ÷ guests, from the owner or their register.</span>
+                  <input id="moc-avg" type="number" inputmode="decimal" min="1" step="0.5" placeholder="e.g. 24" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal"></label>
+                <label class="min-w-0 block"><span class="text-sm font-semibold block mb-1">Food cost (%)</span>
+                  <span class="block text-xs text-inkmute mb-1">Most restaurants run 28–35%.</span>
+                  <input id="moc-food" type="number" inputmode="numeric" min="5" max="80" step="1" placeholder="30" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal"></label>
+                <label class="min-w-0 block"><span class="text-sm font-semibold block mb-1">Every-visit reward menu price ($)</span>
+                  <span class="block text-xs text-inkmute mb-1">e.g. fries $6</span>
+                  <input id="moc-reward" type="number" inputmode="decimal" min="0" step="0.5" placeholder="e.g. 6" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal"></label>
+                <label class="min-w-0 block"><span class="text-sm font-semibold block mb-1">Biggest prize menu price ($)</span>
+                  <span class="block text-xs text-inkmute mb-1">e.g. entrée $18</span>
+                  <input id="moc-prize" type="number" inputmode="decimal" min="0" step="0.5" placeholder="e.g. 18" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal"></label>
+              </div>
+              <div id="moc-out" class="rounded-2xl bg-[#efe9ff] p-3 text-sm"></div>
+              <button type="button" id="moc-use" class="bg-teal text-bg rounded-full px-4 py-2 text-sm font-semibold hover:bg-amber transition">Use these numbers</button>
+              <span id="moc-used" class="text-xs text-teal ml-2 hidden">Filled in below. Click Save to keep them.</span>
+            </div>
+          </details>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div class="min-w-0">
               <label for="f-minSpend" class="text-sm font-semibold block mb-1">Every-visit reward</label>
@@ -307,8 +333,8 @@
           </div>
         </div>
         <div>
-          <p class="font-mono text-[11px] uppercase tracking-wider text-amberdeep mb-2">Weekly free-meal draw</p>
-          <label class="flex items-start gap-2 text-sm mb-3 cursor-pointer"><input id="f-drawEnabled" type="checkbox" checked class="mt-1 w-4 h-4 shrink-0 accent-[#5b2ee5]"><span>Run the draw. Every check-in = 1 entry; a winner is picked every Monday at 9am and gets their meal free.</span></label>
+          <p class="font-mono text-[11px] uppercase tracking-wider text-amberdeep mb-2">Monthly free-meal draw</p>
+          <label class="flex items-start gap-2 text-sm mb-3 cursor-pointer"><input id="f-drawEnabled" type="checkbox" checked class="mt-1 w-4 h-4 shrink-0 accent-[#5b2ee5]"><span>Run the draw. Every check-in = 1 entry; a winner is picked on the 1st of every month at 9am and gets their meal free.</span></label>
           <div class="min-w-0 sm:w-1/2"><label for="f-drawCap" class="text-sm font-semibold block mb-1">Free meal up to ($)</label><input id="f-drawCap" type="number" inputmode="numeric" min="1" step="1" placeholder="40" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal"></div>
         </div>
       </fieldset>
