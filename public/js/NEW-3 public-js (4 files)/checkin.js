@@ -59,6 +59,7 @@ function renderProgress(p) {
 
   // Draw
   const d = p.draw;
+  document.getElementById('draw-row').classList.toggle('hidden', !d);
   document.getElementById('draw-line').textContent = d ? `You're in the ${d.month || 'monthly'} free-meal draw` : 'Free-meal draw is off';
   document.getElementById('draw-sub').innerHTML = d
     ? `${d.entries} ${d.entries === 1 ? 'entry' : 'entries'} · winner picked ${escapeHtml(d.drawDate || 'on the 1st')} · <a href="/rules">rules</a>` : '';
