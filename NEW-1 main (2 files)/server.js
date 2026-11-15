@@ -847,6 +847,17 @@ app.post('/owner/:token/messages', rateLimit('owner', 60, 10 * 60 * 1000), expre
   writeDB(db);
   res.redirect(303, `${base}?saved=1#messages`);
 });
+app.post('/owner/:token/draw', rateLimit('owner', 60, 10 * 60 * 1000), express.urlencoded({ extended: false, limit: '1kb' }), (req, res) => {
+  const db = readDB();
+  const lead = leadByOwnerToken(db, req.params.token);
+  if (!lead) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  const base = `/owner/${encodeURIComponent(lead.ownerToken)}`;
+  if (!ownerUnlocked(req, lead)) return res.redirect(303, base);
+  lead.drawEnabled = String(req.body && req.body.on) === '1';
+  lead.updatedAt = new Date().toISOString();
+  writeDB(db);
+  res.redirect(303, `${base}?draw=1#draw`);
+});
 // CRM: the same message menu with previews
 app.get('/api/leads/:id/promos', (req, res) => {
   const db = readDB();
@@ -861,19 +872,26 @@ app.get('/owner/:token/guests.csv', rateLimit('owner', 60, 10 * 60 * 1000), (req
   if (!ownerUnlocked(req, lead)) return res.redirect(303, `/owner/${encodeURIComponent(lead.ownerToken)}`);
   sendCsv(res, lead, guestCsv(db, lead));
 });
-function ownerDrawBox(db, lead) {
+function ownerDrawBox(db, lead, drawSaved) {
   const w = windowLabel(lead);
   const mk = monthKey(localDay(new Date()));
   const entries = monthEntries(db, lead.id, mk);
   const total = [...entries.values()].reduce((a, b) => a + b, 0);
   const last = lastDraw(db, lead.id);
-  const drawLine = !drawOn(lead) ? 'The monthly free-meal draw is off.'
+  const on = drawOn(lead);
+  const drawLine = !on ? 'The monthly free-meal draw is off. Guests see nothing about it.'
     : `${total} ${total === 1 ? 'entry' : 'entries'} from ${entries.size} ${entries.size === 1 ? 'guest' : 'guests'} so far in ${monthName(mk)}. Winner picked ${nextDrawLabel(mk)} (meal up to $${drawCap(lead)}).`;
   const lastLine = last ? (last.winnerName ? `Last winner: <b>${escHtml(last.winnerName)}</b> · ${last.claimedAt ? 'claimed' : 'not claimed yet'}` : 'Last month: no entries, no winner.') : '';
   return `<div style="background:#5b2ee5;color:#fff;border-radius:18px;padding:16px 18px;margin-bottom:16px">
     <p style="margin:0;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#ffc83d;font-weight:700">Rewards are used</p>
     <p style="margin:2px 0 10px;font-size:22px;font-weight:800">${escHtml(w)}</p>
-    <p style="margin:0">${drawLine}</p>${lastLine ? `<p style="margin:6px 0 0">${lastLine}</p>` : ''}</div>`;
+    <p style="margin:0">${drawLine}</p>${lastLine ? `<p style="margin:6px 0 0">${lastLine}</p>` : ''}
+    <form method="post" action="/owner/${encodeURIComponent(lead.ownerToken)}/draw" id="draw" style="margin:12px 0 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="hidden" name="on" value="${on ? '0' : '1'}">
+      <button style="padding:9px 16px;border:0;border-radius:999px;font-weight:800;font-size:14px;cursor:pointer;${on ? 'background:transparent;color:#fff;box-shadow:inset 0 0 0 2px #fff' : 'background:#ffc83d;color:#1d1640'}">${on ? 'Turn the free-meal draw off' : 'Turn the free-meal draw on'}</button>
+      ${drawSaved ? `<span style="font-weight:700;color:#ffc83d">${on ? 'Draw is on.' : 'Draw is off.'}</span>` : ''}
+    </form>
+    <p style="margin:8px 0 0;font-size:12px;opacity:.85">${on ? 'Turning it off stops new entries. A winner who already won can still claim their meal.' : `Turn it on and every check-in is an entry. One winner a month gets their meal free, up to $${drawCap(lead)}.`}</p></div>`;
 }
 app.get('/owner/:token', rateLimit('owner', 60, 10 * 60 * 1000), (req, res) => {
   const db = readDB();
@@ -898,7 +916,7 @@ ${lead.logoFile ? `<img src="${logoUrl(lead)}" alt="${escHtml(lead.restaurantNam
 <main style="max-width:640px;margin:0 auto;padding:18px 16px 40px">
 <nav style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${tab('current', 'This month')}${tab('last', 'Last month')}
 <a href="${base}/guests.csv" style="padding:8px 14px;border-radius:999px;text-decoration:none;font-weight:700;background:#d81b6a;color:#fff">Download guest list</a></nav>
-${ownerDrawBox(db, lead)}
+${ownerDrawBox(db, lead, req.query.draw === '1')}
 ${ownerMathBox(lead)}
 ${ownerMessagesBox(db, lead, req.query.saved === '1')}
 ${html}
