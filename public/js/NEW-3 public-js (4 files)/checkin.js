@@ -5,7 +5,7 @@ let minSpend = null, minSpendBig = null; // minimum order to redeem, set per res
 const minText = (n) => (n ? `with a $${n}+ order` : '');
 let restaurantName = '';
 let win = null;      // Club Night window from the server: { label, openNow, opensAt, closesAt }
-let drawInfo = null; // weekly free-meal draw: { cap, lastWinner }
+let drawInfo = null; // monthly free-meal draw: { cap, lastWinner, month, drawDate }
 
 // ---- saved-on-this-phone token (so guests only fill the form once) ----
 function getToken() {
@@ -59,9 +59,9 @@ function renderProgress(p) {
 
   // Draw
   const d = p.draw;
-  document.getElementById('draw-line').textContent = d ? "You're in this week's free-meal draw" : 'Free-meal draw is off';
+  document.getElementById('draw-line').textContent = d ? `You're in the ${d.month || 'monthly'} free-meal draw` : 'Free-meal draw is off';
   document.getElementById('draw-sub').innerHTML = d
-    ? `${d.entries} ${d.entries === 1 ? 'entry' : 'entries'} · winner picked Monday · <a href="/rules">rules</a>` : '';
+    ? `${d.entries} ${d.entries === 1 ? 'entry' : 'entries'} · winner picked ${escapeHtml(d.drawDate || 'on the 1st')} · <a href="/rules">rules</a>` : '';
 
   // Saved for Club Night (prizes only; the meal has its own banner)
   const prizes = saved.filter((b) => b.kind !== 'meal');
@@ -210,7 +210,7 @@ function renderDrawTeaser() {
   if (!drawInfo) return;
   box.classList.remove('hidden');
   document.getElementById('draw-title').textContent = `Win your whole meal free (up to $${drawInfo.cap})`;
-  document.getElementById('draw-text').innerHTML = `Every check-in is an entry in this week's draw. Winner picked every Monday.${drawInfo.lastWinner ? ` Last week: ${escapeHtml(drawInfo.lastWinner)} won!` : ''} <a href="/rules">Rules</a>`;
+  document.getElementById('draw-text').innerHTML = `Every check-in is an entry in this month's draw. Winner picked on the 1st of every month.${drawInfo.lastWinner ? ` Last winner: ${escapeHtml(drawInfo.lastWinner)}!` : ''} <a href="/rules">Rules</a>`;
 }
 
 async function loadRestaurant() {

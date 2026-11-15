@@ -297,6 +297,7 @@ function openModal(id) {
     setLogoUI(lead);
     document.getElementById('f-minSpend').value = lead.minSpend || '';
     document.getElementById('f-minSpendBig').value = lead.minSpendBig || '';
+    mocLoad(lead);
     const days = Array.isArray(lead.redeemDays) && lead.redeemDays.length ? lead.redeemDays : [1, 2, 3];
     document.querySelectorAll('.f-day').forEach((cb) => { cb.checked = days.includes(Number(cb.value)); });
     document.getElementById('f-redeemFrom').value = lead.redeemFrom || '17:00';
@@ -329,6 +330,7 @@ function openModal(id) {
     loadAutomations(lead.id);
   } else {
     document.getElementById('modal-title').textContent = 'Add Lead';
+    mocLoad(null);
     document.getElementById('f-id').value = '';
     document.getElementById('f-stage').value = STAGES[0];
     setLogoUI(null);
@@ -395,6 +397,59 @@ function closeModal() {
   document.getElementById('modal-backdrop').classList.add('hidden');
 }
 
+// ---- Minimum order calculator (same math as the Minimum Order Calculator page) ----
+const MOC_TIERS = { cafe: { label: 'Café / quick', share: 0.60, big: 1.0 }, casual: { label: 'Casual', share: 0.65, big: 1.0 },
+  mid: { label: 'Mid-range', share: 0.70, big: 1.1 }, high: { label: 'High-end', share: 0.75, big: 1.2 } };
+let mocTier = 'casual';
+const mocRound = (n) => (n <= 0 ? 0 : n < 20 ? Math.round(n) : Math.round(n / 5) * 5);
+const mocUsd = (n) => '$' + (Math.round(n * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
+const mocNum = (id) => Math.max(0, parseFloat(document.getElementById(id).value) || 0);
+function mocCalc() {
+  const t = MOC_TIERS[mocTier]; const avg = mocNum('moc-avg'); const reward = mocNum('moc-reward'); const prize = mocNum('moc-prize');
+  const food = Math.min(80, Math.max(5, mocNum('moc-food') || 30)) / 100;
+  const warns = [];
+  let a = Math.max(avg * t.share, reward / 0.35);
+  if (a > avg) { a = avg; if (avg) warns.push(`The every-visit reward (${mocUsd(reward)}) is big for a ${mocUsd(avg)} average check. Try a reward under ${mocUsd(avg * t.share * 0.35)} so most orders qualify.`); }
+  let b = Math.max(avg * t.big, prize / 0.5);
+  if (b > avg * 1.5) { b = avg * 1.5; if (avg) warns.push(`The biggest prize (${mocUsd(prize)}) is generous for these prices. A prize under ${mocUsd(avg * 0.75)} fits better.`); }
+  const A = mocRound(a); const B = Math.max(mocRound(b), A);
+  return { avg, reward, prize, food, A, B, warns };
+}
+function mocRender() {
+  const r = mocCalc(); const out = document.getElementById('moc-out');
+  document.getElementById('moc-use').disabled = !r.A;
+  if (!r.avg) { out.innerHTML = '<span class="text-inkmute">Type the average check to see the minimums.</span>'; return; }
+  const costA = r.reward * r.food; const costB = r.prize * r.food;
+  out.innerHTML = `<div class="grid grid-cols-2 gap-3 mb-2">
+      <div><span class="block text-xs uppercase tracking-wider text-inkmute">Every-visit reward</span><b class="text-2xl text-ink">${mocUsd(r.A)}+</b><span class="block text-xs text-inkmute">${Math.round(r.A / r.avg * 100)}% of an average check</span></div>
+      <div><span class="block text-xs uppercase tracking-wider text-inkmute">Milestone &amp; streak prizes</span><b class="text-2xl text-ink">${mocUsd(r.B)}+</b><span class="block text-xs text-inkmute">${Math.round(r.B / r.avg * 100)}% of an average check</span></div></div>
+    ${r.warns.map((w) => `<p class="text-xs text-brick mb-1">${escapeHtml(w)}</p>`).join('')}
+    ${r.reward ? `<p class="text-xs text-inkmute">Reward costs the owner ${mocUsd(costA)} (${Math.round(costA / r.A * 100)}% of the minimum order). Left on a minimum order after food and the reward: ${mocUsd(Math.max(0, r.A * (1 - r.food) - costA))}.</p>` : ''}
+    ${r.prize ? `<p class="text-xs text-inkmute">Biggest prize costs the owner ${mocUsd(costB)}.</p>` : ''}`;
+}
+function mocTiers() {
+  const box = document.getElementById('moc-tiers');
+  box.innerHTML = Object.entries(MOC_TIERS).map(([k, t]) => `<button type="button" data-t="${k}" class="rounded-full border px-3 py-1.5 text-sm font-semibold ${k === mocTier ? 'bg-[#5b2ee5] text-white border-[#5b2ee5]' : 'border-hair text-ink'}">${t.label}</button>`).join('');
+  box.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { mocTier = b.dataset.t; mocTiers(); mocRender(); }));
+}
+function mocLoad(lead) {
+  mocTier = (lead && MOC_TIERS[lead.mocTier]) ? lead.mocTier : 'casual';
+  document.getElementById('moc-avg').value = (lead && lead.avgCheck) || '';
+  document.getElementById('moc-reward').value = (lead && lead.mocReward) || '';
+  document.getElementById('moc-prize').value = (lead && lead.mocPrize) || '';
+  document.getElementById('moc-food').value = (lead && lead.mocFood) || '';
+  document.getElementById('moc-used').classList.add('hidden');
+  mocTiers(); mocRender();
+}
+['moc-avg', 'moc-reward', 'moc-prize', 'moc-food'].forEach((id) => document.getElementById(id).addEventListener('input', mocRender));
+document.getElementById('moc-avg').addEventListener('input', () => { const o = document.getElementById('avg-check'); if (o) o.value = document.getElementById('moc-avg').value; });
+document.getElementById('moc-use').addEventListener('click', () => {
+  const r = mocCalc(); if (!r.A) return;
+  document.getElementById('f-minSpend').value = r.A;
+  document.getElementById('f-minSpendBig').value = r.B > r.A ? r.B : '';
+  document.getElementById('moc-used').classList.remove('hidden');
+});
+
 async function saveLead() {
   const id = document.getElementById('f-id').value;
   const payload = {
@@ -418,6 +473,12 @@ async function saveLead() {
     notes: document.getElementById('f-notes').value,
   };
   payload.baselineWeekly = document.getElementById('f-baselineWeekly').value.trim();
+  payload.mocTier = mocTier;
+  payload.mocReward = document.getElementById('moc-reward').value.trim();
+  payload.mocPrize = document.getElementById('moc-prize').value.trim();
+  payload.mocFood = document.getElementById('moc-food').value.trim();
+  const avgTyped = document.getElementById('moc-avg').value.trim();
+  if (avgTyped || id) payload.avgCheck = avgTyped;
   const pin = document.getElementById('f-ownerPin').value.trim();
   if (pin && !/^\d{4,6}$/.test(pin)) { alert('Owner PIN must be 4 to 6 digits (or blank).'); return; }
   payload.ownerPin = pin;
@@ -590,7 +651,7 @@ function renderOwnerTools(lead) {
       It goes to the owner email above${lead.email ? ` (<span class="font-mono text-xs">${escapeHtml(lead.email)}</span>)` : ' (add one first)'}.</p>
     <div class="flex flex-wrap items-center gap-2 mb-2">
       <label class="text-sm text-inkmute">Average check $</label>
-      <input id="avg-check" type="number" min="1" step="1" value="${Number(lead.avgCheck) > 0 ? Number(lead.avgCheck) : ''}" placeholder="25"
+      <input id="avg-check" type="number" min="1" step="0.5" value="${Number(lead.avgCheck) > 0 ? Number(lead.avgCheck) : ''}" placeholder="25"
         class="w-24 bg-bg border border-hair rounded px-3 py-1.5 text-sm focus:outline-none focus:border-teal">
       <button id="btn-save-avg" class="border border-teal text-teal rounded-lg px-3 py-1.5 text-sm font-semibold hover:bg-teal hover:text-bg transition">Save</button>
     </div>
@@ -611,8 +672,12 @@ function renderOwnerTools(lead) {
     <h3 class="font-display font-800 text-xl mt-5 mb-1">Free-Meal Draw</h3>
     <div id="draw-panel" class="text-sm text-inkmute mb-2">Loading…</div>
     <div class="flex flex-wrap gap-2 mb-2">
-      <button id="btn-draw-now" class="border border-hair text-inkmute rounded-lg px-3 py-1.5 text-sm hover:border-teal transition">Run last week's draw now</button>
+      <button id="btn-draw-now" class="border border-hair text-inkmute rounded-lg px-3 py-1.5 text-sm hover:border-teal transition">Run last month's draw now</button>
     </div>
+    <h3 class="font-display font-800 text-xl mt-5 mb-1">Member Messages</h3>
+    <p class="text-inkmute text-sm mb-2">Ticked messages send by themselves. The owner can change these on their owner page too.</p>
+    <div id="promo-picks" class="text-sm mb-2">Loading…</div>
+    <button id="btn-save-picks" class="border border-teal text-teal rounded-lg px-3 py-1.5 text-sm font-semibold hover:bg-teal hover:text-bg transition mb-2">Save messages</button>
     <p id="owner-tools-status" class="text-xs text-teal hidden"></p>`;
 
   const status = (msg) => { const el = document.getElementById('owner-tools-status'); el.textContent = msg; el.classList.remove('hidden'); };
@@ -621,6 +686,7 @@ function renderOwnerTools(lead) {
     if (!(v > 0)) return status('Enter the average check in dollars, e.g. 25.');
     await fetch(`/api/leads/${lead.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ avgCheck: v }) });
     lead.avgCheck = v;
+    document.getElementById('moc-avg').value = v; mocRender();
     status(`Saved: reports now use $${v} per return visit.`);
   });
   let ownerLink = '';
@@ -645,15 +711,33 @@ function renderOwnerTools(lead) {
     const data = await fetch(`/api/leads/${lead.id}/draws`).then((r) => r.json()).catch(() => null);
     const panel = document.getElementById('draw-panel');
     if (!data) { panel.textContent = 'Could not load draws.'; return; }
-    const fmt = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-    const rows = data.draws.map((d) => `<li class="flex justify-between gap-3 border-b border-hair py-1.5"><span>Week of ${fmt(d.week)}: <b class="text-ink">${escapeHtml(d.winnerName || 'no entries')}</b></span><span class="text-xs">${d.winnerName ? (d.claimedAt ? 'claimed ✓' : 'not claimed') : ''} · ${d.entries} entries</span></li>`).join('');
-    panel.innerHTML = `<p class="mb-2">${lead.drawEnabled === false ? 'The draw is off for this restaurant.' : `This week so far: <b class="text-ink">${data.thisWeek.entries}</b> entries from ${data.thisWeek.players} guests. Winner picked Monday 9am.`}</p>${rows ? `<ul>${rows}</ul>` : '<p>No draws yet.</p>'}`;
+    const fmt = (d) => (d.month ? new Date(`${d.month}-15T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+      : `Week of ${new Date(`${d.week}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`);
+    const rows = data.draws.map((d) => `<li class="flex justify-between gap-3 border-b border-hair py-1.5"><span>${fmt(d)}: <b class="text-ink">${escapeHtml(d.winnerName || 'no entries')}</b></span><span class="text-xs">${d.winnerName ? (d.claimedAt ? 'claimed ✓' : 'not claimed') : ''} · ${d.entries} entries</span></li>`).join('');
+    panel.innerHTML = `<p class="mb-2">${lead.drawEnabled === false ? 'The draw is off for this restaurant.' : `This month so far: <b class="text-ink">${data.thisMonth.entries}</b> entries from ${data.thisMonth.players} guests. Winner picked on the 1st at 9am.`}</p>${rows ? `<ul>${rows}</ul>` : '<p>No draws yet.</p>'}`;
   };
   loadDraws();
+  const loadPicks = async () => {
+    const data = await fetch(`/api/leads/${lead.id}/promos`).then((r) => r.json()).catch(() => null);
+    const box2 = document.getElementById('promo-picks');
+    if (!data) { box2.textContent = 'Could not load messages.'; return; }
+    box2.innerHTML = data.items.map((x) => `<label class="flex gap-2 items-start border-b border-hair py-2 cursor-pointer">
+      <input type="checkbox" class="promo-pick mt-1 w-4 h-4 shrink-0 accent-[#5b2ee5]" value="${x.key}" ${x.on ? 'checked' : ''}>
+      <span><b class="text-ink">${escapeHtml(x.title)}</b> <span class="text-xs text-inkmute">· ${escapeHtml(x.when)} · ${escapeHtml(x.who)}</span>
+      <span class="block text-xs text-inkmute mt-0.5">${escapeHtml(x.sms)}</span></span></label>`).join('')
+      + `<p class="text-xs text-inkmute mt-1">Max ${data.cap} per guest a month, 1 a day.</p>`;
+  };
+  loadPicks();
+  document.getElementById('btn-save-picks').addEventListener('click', async () => {
+    const picks = [...document.querySelectorAll('.promo-pick:checked')].map((c) => c.value);
+    const res = await fetch(`/api/leads/${lead.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ promoPicks: picks }) });
+    if (res.ok) lead.promoPicks = picks;
+    status(res.ok ? 'Messages saved.' : 'Could not save messages.');
+  });
   document.getElementById('btn-draw-now').addEventListener('click', async () => {
     const res = await fetch(`/api/leads/${lead.id}/draws/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     const data = await res.json().catch(() => ({}));
-    status(res.ok ? (data.winnerName ? `Winner: ${data.winnerName}. They've been notified.` : 'No entries last week, so no winner.') : (data.error || 'Could not run the draw.'));
+    status(res.ok ? (data.winnerName ? `Winner: ${data.winnerName}. They've been notified.` : 'No entries last month, so no winner.') : (data.error || 'Could not run the draw.'));
     loadDraws();
   });
   document.getElementById('btn-send-report').addEventListener('click', async () => {
