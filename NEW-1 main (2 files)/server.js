@@ -2,7 +2,9 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { sendSms, SIMULATION_MODE } = require('./sms');
+const { sendSms: sendSmsRaw, SIMULATION_MODE } = require('./sms');
+// Keep texts in the plain SMS alphabet: one curly quote or long dash makes a text cost double.
+const sendSms = (to, body) => sendSmsRaw(to, String(body).replace(/[\u2013\u2014]/g, '-').replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"'));
 const { sendEmail, EMAIL_SIMULATION } = require('./email');
 
 const app = express();
@@ -152,7 +154,7 @@ function passStatus(customer) {
 //   X-0143 = reward already used today
 // The number counts up with every visit at the restaurant. Re-scanning the same day shows the same code.
 //   S-0143 = SAVED: visit counted, but rewards wait for the Club Night window (nothing to give today)
-//   W-0143 = WINNER: this guest won the weekly free-meal draw (meal up to the restaurant's cap)
+//   W-0143 = WINNER: this guest won the monthly free-meal draw (meal up to the restaurant's cap)
 const SCAN_LETTERS = { reward: 'R', new: 'N', used: 'X', bonus: 'B', saved: 'S', meal: 'W' };
 
 // ---- Club Night window: rewards and prizes can only be used on these evenings ----
@@ -240,17 +242,23 @@ function bankItem(kind, label, extra = {}) {
            expiresAt: new Date(Date.now() + BANK_DAYS * 86400000).toISOString(), ...extra };
 }
 
-// ---- Weekly free-meal draw ----
-// Every day a guest checks in = 1 entry (no purchase needed, see /rules). Monday 9am the server picks
-// one winner per restaurant for last week (Mon–Sun), weighted by entries. The meal is capped by the owner.
+// ---- Monthly free-meal draw ----
+// Every day a guest checks in = 1 entry (no purchase needed, see /rules). On the 1st of each month, from 9am,
+// the server picks one winner per restaurant for last month, weighted by entries. The meal is capped by the owner.
 const DEFAULT_DRAW_CAP = 40;
+const DRAW_MONTHLY_FROM = '2026-10'; // first month drawn under monthly rules (weekly draws ran before this)
 const drawOn = (r) => r.drawEnabled !== false;
 const drawCap = (r) => (Number(r.drawCap) > 0 ? Number(r.drawCap) : DEFAULT_DRAW_CAP);
-function weekEntries(db, restaurantId, wk) {
-  const end = weeksBefore(wk, -1);
+const monthKey = (day) => String(day).slice(0, 7); // 'YYYY-MM-DD' -> 'YYYY-MM'
+function prevMonth(mk) { const [y, m] = mk.split('-').map(Number); return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`; }
+function nextMonth(mk) { const [y, m] = mk.split('-').map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; }
+const monthName = (mk) => new Date(`${mk}-15T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' });
+const monthLabel = (mk) => new Date(`${mk}-15T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+const nextDrawLabel = (mk) => new Date(`${nextMonth(mk)}-01T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+function monthEntries(db, restaurantId, mk) {
   const byCustomer = new Map();
   db.visits.forEach((v) => {
-    if (v.restaurantId === restaurantId && v.day >= wk && v.day < end) byCustomer.set(v.customerId, (byCustomer.get(v.customerId) || 0) + 1);
+    if (v.restaurantId === restaurantId && monthKey(v.day) === mk) byCustomer.set(v.customerId, (byCustomer.get(v.customerId) || 0) + 1);
   });
   return byCustomer;
 }
@@ -259,15 +267,17 @@ function shortName(c) {
   if (!parts.length) return 'A lucky guest';
   return parts[0] + (parts[1] ? ` ${parts[1][0].toUpperCase()}.` : '');
 }
+const drawSortKey = (d) => d.drawnAt || d.month || d.week || '';
 function lastDraw(db, restaurantId) {
-  return db.draws.filter((d) => d.restaurantId === restaurantId).sort((a, b) => (a.week < b.week ? 1 : -1))[0] || null;
+  return db.draws.filter((d) => d.restaurantId === restaurantId).sort((a, b) => (drawSortKey(a) < drawSortKey(b) ? 1 : -1))[0] || null;
 }
 function drawStatusFor(db, restaurant, customer) {
   if (!drawOn(restaurant)) return null;
-  const wk = weekStart(localDay(new Date()));
-  const entries = customer ? (weekEntries(db, restaurant.id, wk).get(customer.id) || 0) : 0;
+  const mk = monthKey(localDay(new Date()));
+  const entries = customer ? (monthEntries(db, restaurant.id, mk).get(customer.id) || 0) : 0;
   const last = lastDraw(db, restaurant.id);
-  return { cap: drawCap(restaurant), entries, lastWinner: last && last.winnerName ? last.winnerName : '' };
+  return { cap: drawCap(restaurant), entries, lastWinner: last && last.winnerName ? last.winnerName : '',
+           month: monthName(mk), drawDate: nextDrawLabel(mk) };
 }
 
 // ---- Streaks, badges and bigger prizes ----
@@ -481,7 +491,7 @@ app.use((req, res, next) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Official rules for the weekly free-meal draw (linked from every guest page)
+// Official rules for the monthly free-meal draw (linked from every guest page)
 app.get('/rules', (req, res) => sendPage(res, 'rules.html'));
 
 // The public check-in page a QR code / NFC tag points to: /checkin/<restaurantId>
@@ -577,6 +587,9 @@ app.post('/api/leads', (req, res) => {
     drawCap: cleanMoney(req.body.drawCap),
     baselineWeekly: cleanAmount(req.body.baselineWeekly),
     ownerPin: cleanOwnerPin(req.body.ownerPin),
+    avgCheck: cleanPrice(req.body.avgCheck), mocTier: MOC_TIERS[req.body.mocTier] ? req.body.mocTier : 'casual',
+    mocReward: cleanPrice(req.body.mocReward), mocPrize: cleanPrice(req.body.mocPrize), mocFood: cleanPct(req.body.mocFood),
+    ...(req.body.promoPicks !== undefined ? { promoPicks: cleanPromoPicks(req.body.promoPicks) } : {}),
     prize2: req.body.prize2 || '',
     prize3: req.body.prize3 || '',
     prize5: req.body.prize5 || '',
@@ -622,6 +635,13 @@ app.put('/api/leads/:id', (req, res) => {
   if (body.drawCap !== undefined) body.drawCap = cleanMoney(body.drawCap);
   if (body.baselineWeekly !== undefined) body.baselineWeekly = cleanAmount(body.baselineWeekly);
   if (body.ownerPin !== undefined) body.ownerPin = cleanOwnerPin(body.ownerPin);
+  if (body.avgCheck !== undefined) body.avgCheck = cleanPrice(body.avgCheck);
+  if (body.mocTier !== undefined) body.mocTier = MOC_TIERS[body.mocTier] ? body.mocTier : 'casual';
+  if (body.mocReward !== undefined) body.mocReward = cleanPrice(body.mocReward);
+  if (body.mocPrize !== undefined) body.mocPrize = cleanPrice(body.mocPrize);
+  if (body.mocFood !== undefined) body.mocFood = cleanPct(body.mocFood);
+  if (body.promoPicks !== undefined) body.promoPicks = cleanPromoPicks(body.promoPicks);
+  delete body.promoSent;
   delete body.bank;
   if (body.staffPin !== undefined && !/^\d{4}$/.test(String(body.staffPin))) delete body.staffPin;
   const updated = {
@@ -816,6 +836,24 @@ app.post('/owner/:token/pin', rateLimit('ownerpin', 10, 15 * 60 * 1000), express
   res.set('Set-Cookie', `${ownerCookieName(lead)}=${ownerPinKey(lead)}; Path=${base}; Max-Age=${90 * 24 * 3600}; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`);
   res.redirect(303, base);
 });
+app.post('/owner/:token/messages', rateLimit('owner', 60, 10 * 60 * 1000), express.urlencoded({ extended: false, limit: '4kb' }), (req, res) => {
+  const db = readDB();
+  const lead = leadByOwnerToken(db, req.params.token);
+  if (!lead) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  const base = `/owner/${encodeURIComponent(lead.ownerToken)}`;
+  if (!ownerUnlocked(req, lead)) return res.redirect(303, base);
+  lead.promoPicks = cleanPromoPicks(req.body && req.body.picks);
+  lead.updatedAt = new Date().toISOString();
+  writeDB(db);
+  res.redirect(303, `${base}?saved=1#messages`);
+});
+// CRM: the same message menu with previews
+app.get('/api/leads/:id/promos', (req, res) => {
+  const db = readDB();
+  const lead = db.leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).json({ error: 'Not found' });
+  res.json({ cap: PROMO_MONTHLY_CAP, items: promoMenu(lead) });
+});
 app.get('/owner/:token/guests.csv', rateLimit('owner', 60, 10 * 60 * 1000), (req, res) => {
   const db = readDB();
   const lead = leadByOwnerToken(db, req.params.token);
@@ -825,13 +863,13 @@ app.get('/owner/:token/guests.csv', rateLimit('owner', 60, 10 * 60 * 1000), (req
 });
 function ownerDrawBox(db, lead) {
   const w = windowLabel(lead);
-  const wk = weekStart(localDay(new Date()));
-  const entries = weekEntries(db, lead.id, wk);
+  const mk = monthKey(localDay(new Date()));
+  const entries = monthEntries(db, lead.id, mk);
   const total = [...entries.values()].reduce((a, b) => a + b, 0);
   const last = lastDraw(db, lead.id);
-  const drawLine = !drawOn(lead) ? 'The weekly free-meal draw is off.'
-    : `${total} ${total === 1 ? 'entry' : 'entries'} from ${entries.size} ${entries.size === 1 ? 'guest' : 'guests'} so far this week. Winner picked Monday morning (meal up to $${drawCap(lead)}).`;
-  const lastLine = last ? (last.winnerName ? `Last winner: <b>${escHtml(last.winnerName)}</b> · ${last.claimedAt ? 'claimed' : 'not claimed yet'}` : 'Last week: no entries, no winner.') : '';
+  const drawLine = !drawOn(lead) ? 'The monthly free-meal draw is off.'
+    : `${total} ${total === 1 ? 'entry' : 'entries'} from ${entries.size} ${entries.size === 1 ? 'guest' : 'guests'} so far in ${monthName(mk)}. Winner picked ${nextDrawLabel(mk)} (meal up to $${drawCap(lead)}).`;
+  const lastLine = last ? (last.winnerName ? `Last winner: <b>${escHtml(last.winnerName)}</b> · ${last.claimedAt ? 'claimed' : 'not claimed yet'}` : 'Last month: no entries, no winner.') : '';
   return `<div style="background:#5b2ee5;color:#fff;border-radius:18px;padding:16px 18px;margin-bottom:16px">
     <p style="margin:0;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#ffc83d;font-weight:700">Rewards are used</p>
     <p style="margin:2px 0 10px;font-size:22px;font-weight:800">${escHtml(w)}</p>
@@ -861,6 +899,8 @@ ${lead.logoFile ? `<img src="${logoUrl(lead)}" alt="${escHtml(lead.restaurantNam
 <nav style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${tab('current', 'This month')}${tab('last', 'Last month')}
 <a href="${base}/guests.csv" style="padding:8px 14px;border-radius:999px;text-decoration:none;font-weight:700;background:#d81b6a;color:#fff">Download guest list</a></nav>
 ${ownerDrawBox(db, lead)}
+${ownerMathBox(lead)}
+${ownerMessagesBox(db, lead, req.query.saved === '1')}
 ${html}
 <p style="color:#5c5578;font-size:13px;margin-top:24px">This page is private to your restaurant. Don't share the link. Questions? Text or email Christopher.</p>
 </main></body></html>`);
@@ -922,6 +962,43 @@ function cleanAmount(v) {
 function cleanMoney(v) {
   const n = Math.round(Number(String(v ?? '').replace(/[^0-9.]/g, '')));
   return Number.isFinite(n) && n > 0 ? Math.min(n, 500) : null;
+}
+// Menu prices and checks keep cents (to the nearest 50c).
+function cleanPrice(v) {
+  const n = Math.round(Number(String(v ?? '').replace(/[^0-9.]/g, '')) * 2) / 2;
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 500) : null;
+}
+function cleanPct(v) {
+  const n = Math.round(Number(String(v ?? '').replace(/[^0-9.]/g, '')));
+  return Number.isFinite(n) && n >= 5 && n <= 80 ? n : null;
+}
+
+// ---- Minimum order calculator: the math runs in the CRM (public/js/app.js); these are the saved inputs ----
+const MOC_TIERS = { cafe: { label: 'Café / quick', share: 0.60, big: 1.0 }, casual: { label: 'Casual', share: 0.65, big: 1.0 },
+  mid: { label: 'Mid-range', share: 0.70, big: 1.1 }, high: { label: 'High-end', share: 0.75, big: 1.2 } };
+const money2 = (n) => `$${(Math.round(n * 100) / 100).toFixed(n % 1 ? 2 : 0)}`;
+// Owner page card: the minimums and what a reward really costs them
+function ownerMathBox(lead) {
+  const A = Number(lead.minSpend) || 0;
+  if (!A) return '';
+  const B = Number(lead.minSpendBig) > A ? Number(lead.minSpendBig) : 0;
+  const reward = Number(lead.mocReward) || 0; const prize = Number(lead.mocPrize) || 0;
+  const f = (Number(lead.mocFood) || 30) / 100;
+  const lines = [];
+  if (reward) {
+    const cost = reward * f;
+    lines.push(`A ${money2(reward)} reward costs you about <b>${money2(cost)}</b> in food, ${Math.round(cost / A * 100)}% of a minimum order.`);
+    lines.push(`Left on a ${money2(A)} order after food cost and the reward: about <b>${money2(Math.max(0, A * (1 - f) - cost))}</b> (before labor and rent).`);
+  }
+  if (prize) {
+    const pmin = B || A;
+    lines.push(`Your biggest prize (${money2(prize)} on the menu) costs about <b>${money2(prize * f)}</b>, on an order of ${money2(pmin)} or more.`);
+  }
+  return `<div style="background:#fff;border:1px solid #ece4f7;border-radius:18px;padding:16px 18px;margin:16px 0">
+    <p style="margin:0;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#0b8a74;font-weight:700">Your reward math</p>
+    <p style="margin:4px 0 8px;font-size:20px;font-weight:800">Rewards need a ${money2(A)}+ order${B ? `. Prizes need ${money2(B)}+.` : '.'}</p>
+    ${lines.map((l) => `<p style="margin:6px 0;font-size:15px">${l}</p>`).join('')}
+    <p style="margin:8px 0 0;font-size:13px;color:#5c5578">Guests see the minimum on their screen. If someone shares a code, you still get a paying order${lines.length ? `, worked out at ${Math.round(f * 100)}% food cost` : ''}.</p></div>`;
 }
 
 function escHtml(str) {
@@ -1013,7 +1090,7 @@ app.get('/api/public/restaurant/:id', (req, res) => {
     minSpendBig: restaurant.minSpendBig || null,
     logoUrl: logoUrl(restaurant),
     window: windowInfo(restaurant),
-    draw: drawOn(restaurant) ? { cap: drawCap(restaurant), lastWinner: (lastDraw(db, restaurant.id) || {}).winnerName || '' } : null,
+    draw: drawStatusFor(db, restaurant, null),
   });
 });
 
@@ -1080,12 +1157,12 @@ app.post('/api/public/checkin', rateLimit('checkin', 40, 10 * 60 * 1000), async 
   if (isNewCustomer) {
     const offer = restaurant.currentOffer ? `Your reward: ${restaurant.currentOffer}. ` : '';
     await notifyGuest(db, restaurant, customer, 'welcome', {
-      sms: `Welcome to ${restaurant.restaurantName}'s Tuesday Club! ${offer}Rewards are good ${windowLabel(restaurant)}. Your member ID is ${customer.rewardId}. Every visit also enters you in the weekly free-meal draw. Reply STOP to opt out.`,
+      sms: `Welcome to ${restaurant.restaurantName}'s Tuesday Club! ${offer}Rewards are good ${windowLabel(restaurant)}. Your member ID is ${customer.rewardId}. Every visit also enters you in the monthly free-meal draw. Reply STOP to opt out.`,
       subject: `Welcome to ${restaurant.restaurantName}'s Tuesday Club! Here's your member ID`,
       html: `<p>Thanks for joining${customer.name ? ', ' + escHtml(customer.name) : ''}!</p>
         ${restaurant.currentOffer ? `<p>On your <b>next visit</b> you get: <b>${escHtml(restaurant.currentOffer)}</b></p>` : ''}
         <p>Your rewards are good <b>${escHtml(windowLabel(restaurant))}</b>. Visit any night to earn them, then scan the tag at your table on a Club Night and show your server the code.</p>
-        ${drawOn(restaurant) ? `<p>Every day you check in also enters you in the <b>weekly free-meal draw</b> (meal up to $${drawCap(restaurant)}). <a href="${publicBaseUrl()}/rules">Rules</a></p>` : ''}
+        ${drawOn(restaurant) ? `<p>Every day you check in also enters you in the <b>monthly free-meal draw</b> (meal up to $${drawCap(restaurant)}). <a href="${publicBaseUrl()}/rules">Rules</a></p>` : ''}
         <p>Your member ID:</p>${rewardIdBlock(customer)}`,
     });
     writeDB(db);
@@ -1664,21 +1741,21 @@ async function runStreakReminders() {
   if (sent) writeDB(db);
 }
 
-// ---- Weekly free-meal draw (runs from Monday 9am for last week; catches up if the server was down) ----
-async function runWeeklyDraws(onlyRestaurantId) {
+// ---- Monthly free-meal draw (runs from 9am on the 1st for last month; catches up if the server was down) ----
+async function runMonthlyDraws(onlyRestaurantId) {
   const p = localParts(new Date());
-  if (!onlyRestaurantId && p.dow === 1 && p.minutes < 9 * 60) return;
-  const thisWeek = weekStart(localDay(new Date()));
-  const lastWk = weeksBefore(thisWeek, 1);
+  if (!onlyRestaurantId && p.day.endsWith('-01') && p.minutes < 9 * 60) return;
+  const lastMk = prevMonth(monthKey(p.day));
+  if (lastMk < DRAW_MONTHLY_FROM) return [];
   const db = readDB();
   const done = [];
   for (const r of db.leads) {
     if (onlyRestaurantId ? r.id !== onlyRestaurantId : r.stage !== 'Live Client') continue;
-    if (!drawOn(r) || db.draws.some((d) => d.restaurantId === r.id && d.week === lastWk)) continue;
-    const entries = weekEntries(db, r.id, lastWk);
+    if (!drawOn(r) || db.draws.some((d) => d.restaurantId === r.id && d.month === lastMk)) continue;
+    const entries = monthEntries(db, r.id, lastMk);
     const total = [...entries.values()].reduce((a, b) => a + b, 0);
     const now = new Date().toISOString();
-    const draw = { id: crypto.randomUUID(), restaurantId: r.id, week: lastWk, entries: total, players: entries.size,
+    const draw = { id: crypto.randomUUID(), restaurantId: r.id, month: lastMk, entries: total, players: entries.size,
                    cap: drawCap(r), drawnAt: now, winnerId: null, winnerName: '', claimedAt: null,
                    expiresAt: new Date(Date.now() + BANK_DAYS * 86400000).toISOString() };
     let winner = null;
@@ -1700,26 +1777,25 @@ async function runWeeklyDraws(onlyRestaurantId) {
     const when = windowLabel(r);
     if (winner) {
       await notifyGuest(db, r, winner, 'draw_win', {
-        sms: `You won this week's Tuesday Club free-meal draw at ${r.restaurantName}! Your meal (up to $${draw.cap}) is on us. Come in ${when} within 30 days and scan the tag at your table to claim it. Reply STOP to opt out.`,
+        sms: `You won the ${monthName(draw.month)} Tuesday Club free-meal draw at ${r.restaurantName}! Your meal (up to $${draw.cap}) is on us. Come in ${when} within 30 days and scan the tag at your table to claim it. Reply STOP to opt out.`,
         subject: `You won a free meal at ${r.restaurantName}!`,
         html: `<p style="font-size:30px;font-weight:bold;margin:0 0 6px">You won! 🎉</p>
-          <p>Your name was drawn in this week's Tuesday Club free-meal draw at <b>${escHtml(r.restaurantName)}</b>.</p>
+          <p>Your name was drawn in the ${monthName(draw.month)} Tuesday Club free-meal draw at <b>${escHtml(r.restaurantName)}</b>.</p>
           <p style="font-size:18px"><b>Your meal is on us, up to $${draw.cap}.</b></p>
           <p>To claim it, come in <b>${escHtml(when)}</b> within the next 30 days and scan the tag at your table. Your phone will show a <b>FREE MEAL</b> code for your server.</p>`,
       }, { drawId: draw.id });
     }
     if (r.email) {
-      const wkLabel = new Date(`${draw.week}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
       await sendEmail({
         to: r.email, fromName: 'Tuesday Club',
-        subject: winner ? `This week's free-meal winner at ${r.restaurantName}: ${draw.winnerName}` : `No free-meal winner this week at ${r.restaurantName}`,
+        subject: winner ? `${monthName(draw.month)} free-meal winner at ${r.restaurantName}: ${draw.winnerName}` : `No free-meal winner for ${monthName(draw.month)} at ${r.restaurantName}`,
         html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;color:#1d1640">
-          <p style="color:#d81b6a;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin:0">Tuesday Club weekly draw</p>
-          <h2 style="margin:4px 0 12px">${escHtml(r.restaurantName)} · week of ${wkLabel}</h2>
+          <p style="color:#d81b6a;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin:0">Tuesday Club monthly draw</p>
+          <h2 style="margin:4px 0 12px">${escHtml(r.restaurantName)} · ${monthLabel(draw.month)}</h2>
           ${winner ? `<p><b>${escHtml(draw.winnerName)}</b> won a free meal up to <b>$${draw.cap}</b>.</p>
-          <p>${draw.entries} ${draw.entries === 1 ? 'entry' : 'entries'} from ${draw.players} ${draw.players === 1 ? 'guest' : 'guests'} last week.</p>
+          <p>${draw.entries} ${draw.entries === 1 ? 'entry' : 'entries'} from ${draw.players} ${draw.players === 1 ? 'guest' : 'guests'} in ${monthName(draw.month)}.</p>
           <p>They can claim it ${escHtml(when)} within 30 days. Their phone will show a purple <b>FREE MEAL</b> screen with a code starting with <b>W</b>. Comp their meal up to $${draw.cap}; anything over that, they pay.</p>`
-          : '<p>Nobody checked in last week, so there was no winner. The draw runs again next Monday.</p>'}
+          : `<p>Nobody checked in during ${monthName(draw.month)}, so there was no winner. The next draw is on the 1st of next month.</p>`}
           <p style="color:#5c5578;font-size:13px">— Christopher, Tuesday Club</p></div>`,
       });
     }
@@ -1732,15 +1808,217 @@ async function runWeeklyDraws(onlyRestaurantId) {
 app.get('/api/leads/:id/draws', (req, res) => {
   const db = readDB();
   const list = db.draws.filter((d) => d.restaurantId === req.params.id).slice(0, 12);
-  const wk = weekStart(localDay(new Date()));
-  const entries = weekEntries(db, req.params.id, wk);
-  res.json({ thisWeek: { entries: [...entries.values()].reduce((a, b) => a + b, 0), players: entries.size }, draws: list });
+  const entries = monthEntries(db, req.params.id, monthKey(localDay(new Date())));
+  res.json({ thisMonth: { entries: [...entries.values()].reduce((a, b) => a + b, 0), players: entries.size }, draws: list });
 });
 app.post('/api/leads/:id/draws/run', async (req, res) => {
-  const ran = await runWeeklyDraws(req.params.id);
-  if (!ran || !ran.length) return res.status(409).json({ error: "Last week's draw for this restaurant already ran (or the draw is turned off)." });
+  const ran = await runMonthlyDraws(req.params.id);
+  if (!ran || !ran.length) return res.status(409).json({ error: "Last month's draw for this restaurant already ran (or the draw is turned off)." });
   res.json(ran[0]);
 });
+
+// ---- Member messages the owner picks (checkbox menu on the owner page and in the CRM) ----
+// Each pick sends on its own schedule: by email to members who gave one, and by text once texting is on.
+// Limits per guest: 1 of these a day and PROMO_MONTHLY_CAP a month (matches the "up to 4 msgs/month" consent).
+const PROMO_MONTHLY_CAP = 4;
+const PROMO_DEFAULTS = ['sun_prize', 'day_of'];
+const PROMO_TYPES = ['club_night_reminder', 'promo_sun_prize', 'promo_sun_all', 'promo_draw_last', 'promo_winner', 'promo_friend', 'promo_miss_you'];
+const PROMO_LIBRARY = [
+  { key: 'sun_prize', title: 'Sunday: "Your prize is waiting"', when: 'Sundays at 5pm', who: 'Members with a saved prize or free meal' },
+  { key: 'day_of', title: 'Club Night day: "Tonight!"', when: '3 hours before Club Night opens', who: 'Members with something waiting (once a week each)' },
+  { key: 'sun_all', title: 'Sunday: "Club Night is this week"', when: 'Sundays at 5pm', who: 'Members with nothing saved yet' },
+  { key: 'draw_last', title: 'Last chance for the free-meal draw', when: 'The last Sunday of the month, 5pm', who: 'All members', draw: true },
+  { key: 'winner', title: 'Free-meal winner announced', when: 'The 1st, right after the draw', who: 'All members (the winner gets their own message)', draw: true },
+  { key: 'friend', title: 'Monday: "Bring a friend"', when: 'Mondays at 11am', who: 'Members who visited in the last 30 days' },
+  { key: 'miss_you', title: '"We miss you"', when: 'Sundays at 5pm', who: 'Members not seen in 30+ days (once a month each)' },
+];
+const PROMO_KEYS = PROMO_LIBRARY.map((x) => x.key);
+function cleanPromoPicks(v) {
+  const list = Array.isArray(v) ? v : (v == null ? [] : [v]);
+  return [...new Set(list.map(String).filter((k) => PROMO_KEYS.includes(k)))];
+}
+const promoPicks = (r) => (Array.isArray(r.promoPicks) ? r.promoPicks : PROMO_DEFAULTS);
+const promoAvailable = (r, item) => !item.draw || drawOn(r);
+
+// The words for each message. sample=true fills in example details for previews.
+function promoContent(key, r, { items = [], winnerName = '', drawMonth = '' } = {}) {
+  const R = r.restaurantName;
+  const when = windowLabel(r);
+  const min = r.minSpend ? ` with a $${r.minSpend}+ order` : '';
+  const mk = monthKey(localDay(new Date()));
+  const month = monthName(mk);
+  const draw = drawOn(r);
+  const drawLine = draw ? ` Every visit = 1 entry to win a free meal in ${month}.` : '';
+  const list = items.length ? items.join(' + ') : 'your prize';
+  const STOP = ' Reply STOP to opt out.';
+  const cta = '<p>Scan the QR code or tap the tag at your table and show your server the screen.</p>';
+  switch (key) {
+    case 'sun_prize': return {
+      sms: `${R}: your ${list} is waiting! Use it ${when}${min}.${STOP}`,
+      subject: `Your ${list} is waiting at ${R}`,
+      html: `<p style="font-size:22px;font-weight:bold;margin:0 0 8px">Your prize is waiting!</p>
+        <p>Saved for you at <b>${escHtml(R)}</b>: <b>${escHtml(list)}</b>.</p>
+        <p>Use it <b>${escHtml(when)}</b>${escHtml(min)}.${escHtml(drawLine)}</p>${cta}` };
+    case 'day_of': { const w = redeemWindow(r); return {
+      sms: `It's Club Night at ${R} tonight ${fmtClock(w.from)}–${fmtClock(w.to)}! Waiting for you: ${list}. Scan the tag at your table.${STOP}`,
+      subject: 'Club Night tonight: your reward is waiting',
+      html: `<p style="font-size:22px;font-weight:bold;margin:0 0 8px">It's Club Night tonight!</p>
+        <p>Waiting for you at <b>${escHtml(R)}</b>: <b>${escHtml(list)}</b>.</p>${cta}` }; }
+    case 'sun_all': return {
+      sms: `Club Night at ${R} this week: ${when}. ${draw ? 'Each visit = 1 free-meal draw entry + closer to your next prize.' : 'Every visit gets you closer to your next prize.'}${STOP}`,
+      subject: `Club Night this week at ${R}`,
+      html: `<p style="font-size:22px;font-weight:bold;margin:0 0 8px">Club Night is this week</p>
+        <p><b>${escHtml(R)}</b> · <b>${escHtml(when)}</b></p>
+        <p>Every visit gets you closer to your next prize.${escHtml(drawLine)}</p>${cta}` };
+    case 'draw_last': return {
+      sms: `Last week to enter ${R}'s ${month} free-meal draw (up to $${drawCap(r)})! Each day you check in = 1 entry. Winner picked ${nextDrawLabel(mk)}.${STOP}`,
+      subject: `Last week to win a free meal at ${R}`,
+      html: `<p style="font-size:22px;font-weight:bold;margin:0 0 8px">Last week to enter!</p>
+        <p>The <b>${escHtml(month)}</b> free-meal draw at <b>${escHtml(R)}</b> closes soon. The winner's meal is on us, up to <b>$${drawCap(r)}</b>.</p>
+        <p>Each day you check in = 1 entry. Winner picked <b>${escHtml(nextDrawLabel(mk))}</b>. <a href="${publicBaseUrl()}/rules">Rules</a></p>` };
+    case 'winner': return {
+      sms: `${R}'s ${drawMonth || 'monthly'} free-meal winner: ${winnerName || 'Ana L.'}! The ${month} draw starts now: every check-in = 1 entry.${STOP}`,
+      subject: `${drawMonth || 'This month'}'s free-meal winner at ${R}`,
+      html: `<p style="font-size:22px;font-weight:bold;margin:0 0 8px">We have a winner!</p>
+        <p><b>${escHtml(winnerName || 'Ana L.')}</b> won a free meal at <b>${escHtml(R)}</b> in the ${escHtml(drawMonth || 'monthly')} draw.</p>
+        <p>The <b>${escHtml(month)}</b> draw starts now. Every day you check in = 1 entry. <a href="${publicBaseUrl()}/rules">Rules</a></p>` };
+    case 'friend': return {
+      sms: `Bring a friend to ${R} on Club Night (${when})! They can join the club at the table and start earning too.${STOP}`,
+      subject: `Bring a friend to ${R} on Club Night`,
+      html: `<p style="font-size:22px;font-weight:bold;margin:0 0 8px">Bring a friend!</p>
+        <p>Club Night at <b>${escHtml(R)}</b> is <b>${escHtml(when)}</b>. Your friend can scan the tag at the table, join in seconds and start earning too.</p>` };
+    case 'miss_you': return {
+      sms: `We miss you at ${R}! Come by ${when}. ${draw ? 'Each visit = 1 entry to win a free meal.' : 'Every visit counts toward your next prize.'}${STOP}`,
+      subject: `We miss you at ${R}`,
+      html: `<p style="font-size:22px;font-weight:bold;margin:0 0 8px">We miss you!</p>
+        <p>Come see us at <b>${escHtml(R)}</b>, <b>${escHtml(when)}</b>. Every visit counts toward your next prize.${escHtml(drawLine)}</p>${cta}` };
+    default: return null;
+  }
+}
+function promoSampleItems(r) { return [prizeFor(r, 3)]; }
+function promoMenu(r) {
+  const picks = promoPicks(r);
+  return PROMO_LIBRARY.filter((x) => promoAvailable(r, x)).map((x) => {
+    const c = promoContent(x.key, r, { items: promoSampleItems(r), winnerName: 'Ana L.', drawMonth: monthName(prevMonth(monthKey(localDay(new Date())))) });
+    return { ...x, on: picks.includes(x.key), sms: c.sms, subject: c.subject };
+  });
+}
+
+// Who gets each message right now
+function savedSomething(db, c, now) {
+  const bank = activeBank(c);
+  const sinceReward = c.lastRedemptionAt || '';
+  const savedVisit = db.visits.some((v) => v.customerId === c.id && v.scanStatus === 'saved' && v.at > sinceReward
+    && Date.parse(v.at) > now - 21 * 86400000);
+  return { bank, savedVisit };
+}
+function lastVisitAt(db, c) {
+  let last = '';
+  db.visits.forEach((v) => { if (v.customerId === c.id && v.at > last) last = v.at; });
+  return last || c.optedInAt || '';
+}
+function promoAudience(db, r, key, now = Date.now()) {
+  return db.customers.filter((c) => {
+    if (c.restaurantId !== r.id || !canMessage(c, r)) return false;
+    if (localDay(c.optedInAt) === localDay(new Date(now))) return false; // not on the day they joined
+    const s = savedSomething(db, c, now);
+    const last = Date.parse(lastVisitAt(db, c)) || 0;
+    switch (key) {
+      case 'sun_prize': return s.bank.length > 0;
+      case 'sun_all': return !s.bank.length && !s.savedVisit && now - last < 30 * 86400000;
+      case 'draw_last': case 'winner': return true;
+      case 'friend': return now - last < 30 * 86400000;
+      case 'miss_you': return now - last >= 30 * 86400000;
+      default: return false;
+    }
+  });
+}
+function promoCountsThisMonth(db, restaurantId) {
+  const mk = monthKey(localDay(new Date()));
+  const today = localDay(new Date());
+  const month = new Map(); const day = new Set(); const missYou = new Map();
+  db.messages.forEach((m) => {
+    if (m.restaurantId !== restaurantId || !m.customerId || !PROMO_TYPES.includes(m.type) || !m.sentAt) return;
+    const d = localDay(m.sentAt);
+    if (monthKey(d) === mk) month.set(m.customerId, (month.get(m.customerId) || 0) + 1);
+    if (d === today) day.add(m.customerId);
+    if (m.type === 'promo_miss_you') missYou.set(m.customerId, Math.max(missYou.get(m.customerId) || 0, Date.parse(m.sentAt)));
+  });
+  return { month, day, missYou };
+}
+const promoRoom = (counts, cid) => !counts.day.has(cid) && (counts.month.get(cid) || 0) < PROMO_MONTHLY_CAP;
+function notePromoSent(counts, cid) { counts.day.add(cid); counts.month.set(cid, (counts.month.get(cid) || 0) + 1); }
+
+function daysInMonth(day) { const [y, m] = day.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+// Which messages are due now. Each one has a window, so a restart or short outage still catches up.
+function promosDue(db, r, p) {
+  const due = [];
+  const sundayEve = p.dow === 0 && p.minutes >= 17 * 60 && p.minutes < 21 * 60;
+  if (sundayEve) {
+    // one Sunday message per guest: the most useful one first
+    const dom = Number(p.day.slice(8));
+    if (dom > daysInMonth(p.day) - 7) due.push({ key: 'draw_last', occ: `draw_last:${p.day}` });
+    due.unshift({ key: 'sun_prize', occ: `sun_prize:${p.day}` });
+    due.push({ key: 'miss_you', occ: `miss_you:${p.day}` }, { key: 'sun_all', occ: `sun_all:${p.day}` });
+  }
+  if (p.dow === 1 && p.minutes >= 11 * 60 && p.minutes < 15 * 60) due.push({ key: 'friend', occ: `friend:${p.day}` });
+  if (p.day.endsWith('-01') && p.minutes >= 9 * 60 + 30 && p.minutes < 20 * 60) {
+    const d = lastDraw(db, r.id);
+    if (d && d.month === prevMonth(monthKey(p.day)) && d.winnerId) due.push({ key: 'winner', occ: `winner:${d.id}`, draw: d });
+  }
+  return due;
+}
+async function runPromoMessages() {
+  const db = readDB();
+  const now = new Date();
+  const p = localParts(now);
+  let changed = false;
+  for (const r of db.leads) {
+    if (r.stage !== 'Live Client') continue;
+    const picks = promoPicks(r);
+    const due = promosDue(db, r, p).filter((d) => picks.includes(d.key) && promoAvailable(r, PROMO_LIBRARY.find((x) => x.key === d.key)));
+    if (!due.length) continue;
+    r.promoSent = r.promoSent || {};
+    const counts = promoCountsThisMonth(db, r.id);
+    for (const d of due) {
+      if (r.promoSent[d.key] === d.occ) continue;
+      r.promoSent[d.key] = d.occ; changed = true;
+      for (const c of promoAudience(db, r, d.key, now.getTime())) {
+        if (!promoRoom(counts, c.id)) continue;
+        if (d.key === 'winner' && c.id === d.draw.winnerId) continue;
+        if (d.key === 'miss_you' && now.getTime() - (counts.missYou.get(c.id) || 0) < 28 * 86400000) continue;
+        const items = activeBank(c).map((b) => b.label);
+        const content = promoContent(d.key, r, { items, winnerName: d.draw && d.draw.winnerName, drawMonth: d.draw && monthName(d.draw.month) });
+        await notifyGuest(db, r, c, `promo_${d.key}`, { ...content, preferEmail: true });
+        notePromoSent(counts, c.id);
+      }
+    }
+  }
+  if (changed) writeDB(db);
+}
+
+// Owner page box: tick the messages, see the exact words, save
+function ownerMessagesBox(db, lead, saved) {
+  const base = `/owner/${encodeURIComponent(lead.ownerToken)}`;
+  const texting = !!lead.smsEnabled && !SIMULATION_MODE;
+  const rows = promoMenu(lead).map((x) => {
+    const reach = x.key === 'day_of' ? null : promoAudience(db, lead, x.key).length;
+    return `<label style="display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-top:1px solid #ece4f7;cursor:pointer">
+      <input type="checkbox" name="picks" value="${x.key}" ${x.on ? 'checked' : ''} style="width:22px;height:22px;margin-top:2px;accent-color:#5b2ee5;flex-shrink:0">
+      <span style="flex:1;min-width:0"><b style="font-size:16px">${escHtml(x.title)}</b>
+      <span style="display:block;font-size:13px;color:#5c5578;margin:2px 0 8px">${escHtml(x.when)} · ${escHtml(x.who)}${reach == null ? '' : ` · ${reach} right now`}</span>
+      <span style="display:block;background:#f4efff;border-radius:14px 14px 14px 4px;padding:10px 12px;font-size:14px;line-height:1.4"><b style="font-size:11px;letter-spacing:1px;color:#5b2ee5">TEXT</b><br>${escHtml(x.sms)}</span>
+      <span style="display:block;font-size:13px;color:#5c5578;margin-top:6px"><b>Email subject:</b> ${escHtml(x.subject)}</span></span></label>`;
+  }).join('');
+  return `<form method="post" action="${base}/messages" id="messages" style="background:#fff;border:1px solid #ece4f7;border-radius:18px;padding:16px 18px;margin:16px 0">
+    <p style="margin:0;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#d81b6a;font-weight:700">Messages to your members</p>
+    <p style="margin:4px 0 4px;font-size:20px;font-weight:800">Pick what goes out to bring them back</p>
+    <p style="margin:0 0 6px;font-size:14px;color:#5c5578">Ticked messages send by themselves. Each guest gets at most ${PROMO_MONTHLY_CAP} a month and 1 a day. ${texting ? 'Members get them by email, or by text if they agreed to texts.' : 'For now they go by email to members who gave one. Texts start once texting is turned on.'}</p>
+    ${saved ? '<p style="margin:8px 0;padding:8px 12px;background:#e6faf5;color:#0b8a74;border-radius:10px;font-weight:700">Saved. Your messages are set.</p>' : ''}
+    <input type="hidden" name="sent" value="1">
+    ${rows}
+    <button style="margin-top:10px;width:100%;padding:13px;border:0;border-radius:999px;background:#5b2ee5;color:#fff;font-weight:800;font-size:16px">Save my messages</button></form>`;
+}
 
 // ---- Club Night reminder: on a Club Night, 3 hours before it opens, nudge guests who have something waiting ----
 // "Something waiting" = a saved prize or free meal, or a busy-night visit since their last reward. Max once a week each.
@@ -1754,9 +2032,11 @@ async function runClubNightReminders() {
     if (r.stage !== 'Live Client') continue;
     const w = redeemWindow(r);
     if (!w.days.includes(p.dow) || p.minutes < toMin(w.from) - 180 || p.minutes >= toMin(w.to)) continue;
+    if (!promoPicks(r).includes('day_of')) continue;
+    const counts = promoCountsThisMonth(db, r.id);
     const when = `tonight ${fmtClock(w.from)}–${fmtClock(w.to)}`;
     for (const c of db.customers) {
-      if (c.restaurantId !== r.id || c.clubNightReminderWeek === thisWeek || !canMessage(c, r)) continue;
+      if (c.restaurantId !== r.id || c.clubNightReminderWeek === thisWeek || !canMessage(c, r) || !promoRoom(counts, c.id)) continue;
       if (localDay(c.optedInAt) === p.day) continue;
       const bank = activeBank(c);
       const sinceReward = c.lastRedemptionAt || '';
@@ -1776,6 +2056,7 @@ async function runClubNightReminders() {
           <p>Scan the QR code or tap the tag at your table and show your server the screen.${r.minSpend ? ` Valid with a $${r.minSpend}+ order.` : ''}</p>`,
       });
       c.clubNightReminderWeek = thisWeek;
+      notePromoSent(counts, c.id);
       sent += 1;
     }
   }
@@ -1858,7 +2139,7 @@ async function runDailyBackup(force) {
 }
 
 async function runScheduledJobs() {
-  for (const job of [runFollowUpCheck, runFirstVisitEmailCheck, runStreakReminders, runReviewRequestCheck, runAutomationCheck, runWeeklyDraws, runClubNightReminders, runExpiryWarnings, runMonthlyReports, runDailyBackup]) {
+  for (const job of [runFollowUpCheck, runFirstVisitEmailCheck, runStreakReminders, runReviewRequestCheck, runAutomationCheck, runMonthlyDraws, runPromoMessages, runClubNightReminders, runExpiryWarnings, runMonthlyReports, runDailyBackup]) {
     try { await job(); } catch (err) { console.error(`Scheduled job ${job.name} failed:`, err.message); }
   }
 }
