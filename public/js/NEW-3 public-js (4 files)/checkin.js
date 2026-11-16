@@ -74,7 +74,7 @@ function renderProgress(p) {
   if (p.next) {
     nextRow.classList.remove('hidden');
     document.getElementById('next-line').textContent = `${p.next.remaining} more ${p.next.remaining === 1 ? 'visit' : 'visits'}: ${p.next.prize}`;
-    const prev = [0, 2, 3, 5, 10].filter((n) => n < p.next.n).pop() || 0;
+    const prev = [0, ...p.badges.filter((b) => b.kind === 'visits').map((b) => b.n)].filter((n) => n < p.next.n).pop() || 0;
     const steps = Math.max(1, p.next.n - prev);
     const done = Math.max(0, Math.min(steps, p.visits - prev));
     document.getElementById('next-dots').innerHTML = Array.from({ length: steps }, (_, i) => `<i class="${i < done ? 'on' : ''}"></i>`).join('');
@@ -245,7 +245,9 @@ async function loadRestaurant() {
     minSpendBig = data.minSpendBig || data.minSpend || null;
     document.getElementById('offer-text').textContent = data.currentOffer
       ? `${data.currentOffer}${minSpend ? ` ${minText(minSpend)}` : ''}` : 'Ask your server about today\'s deal!';
-    if (win) document.getElementById('offer-note').textContent = `Earn it on any visit, then use it ${win.label}. Bigger prizes at 2, 3, 5 and 10 visits.`;
+    const big = data.bigPrize;
+    if (win) document.getElementById('offer-note').textContent = `Earn it on any visit, then use it ${win.label}.${big ? ` ${big.prize} on your ${ordinal(big.n)} visit.` : ''}`;
+    document.querySelector('.legend [data-k="meal"]').classList.toggle('hidden', !drawInfo);
     currentOffer = data.currentOffer || '';
   } catch (e) {
     document.getElementById('restaurant-name').textContent = 'Restaurant not found';
@@ -279,7 +281,7 @@ async function tryReturning() {
 }
 
 async function checkIn() {
-  const visitType = document.getElementById('visit-input').value;
+  const visitType = document.getElementById('visit-input').value || 'first_time';
   const name = document.getElementById('name-input').value.trim();
   const phone = document.getElementById('phone-input').value.trim();
   const email = document.getElementById('email-input').value.trim();
@@ -308,7 +310,7 @@ async function checkIn() {
 }
 
 async function joinWithSavedInfo() {
-  const visitType = document.getElementById('join-visit').value;
+  const visitType = document.getElementById('join-visit').value || 'first_time';
   const smsConsent = document.getElementById('join-consent').checked;
   const errorEl = document.getElementById('join-error');
   errorEl.classList.add('hidden');

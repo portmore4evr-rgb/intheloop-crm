@@ -331,6 +331,7 @@ function openModal(id) {
   } else {
     document.getElementById('modal-title').textContent = 'Add Lead';
     mocLoad(null);
+    document.getElementById('f-drawEnabled').checked = false; // new restaurants start with the draw off
     document.getElementById('f-id').value = '';
     document.getElementById('f-stage').value = STAGES[0];
     setLogoUI(null);
@@ -420,12 +421,11 @@ function mocRender() {
   document.getElementById('moc-use').disabled = !r.A;
   if (!r.avg) { out.innerHTML = '<span class="text-inkmute">Type the average check to see the minimums.</span>'; return; }
   const costA = r.reward * r.food; const costB = r.prize * r.food;
-  out.innerHTML = `<div class="grid grid-cols-2 gap-3 mb-2">
-      <div><span class="block text-xs uppercase tracking-wider text-inkmute">Every-visit reward</span><b class="text-2xl text-ink">${mocUsd(r.A)}+</b><span class="block text-xs text-inkmute">${Math.round(r.A / r.avg * 100)}% of an average check</span></div>
-      <div><span class="block text-xs uppercase tracking-wider text-inkmute">Milestone &amp; streak prizes</span><b class="text-2xl text-ink">${mocUsd(r.B)}+</b><span class="block text-xs text-inkmute">${Math.round(r.B / r.avg * 100)}% of an average check</span></div></div>
+  out.innerHTML = `<div class="mb-2">
+      <span class="block text-xs uppercase tracking-wider text-inkmute">Minimum order for rewards and prizes</span><b class="text-2xl text-ink">${mocUsd(r.A)}+</b><span class="block text-xs text-inkmute">${Math.round(r.A / r.avg * 100)}% of an average check</span></div>
     ${r.warns.map((w) => `<p class="text-xs text-brick mb-1">${escapeHtml(w)}</p>`).join('')}
     ${r.reward ? `<p class="text-xs text-inkmute">Reward costs the owner ${mocUsd(costA)} (${Math.round(costA / r.A * 100)}% of the minimum order). Left on a minimum order after food and the reward: ${mocUsd(Math.max(0, r.A * (1 - r.food) - costA))}.</p>` : ''}
-    ${r.prize ? `<p class="text-xs text-inkmute">Biggest prize costs the owner ${mocUsd(costB)}.</p>` : ''}`;
+    ${r.prize ? `<p class="text-xs text-inkmute">5th-visit prize costs the owner ${mocUsd(costB)} (${Math.round(costB / r.A * 100)}% of the minimum order). It only comes once every 5 visits.</p>` : ''}`;
 }
 function mocTiers() {
   const box = document.getElementById('moc-tiers');
@@ -446,7 +446,7 @@ document.getElementById('moc-avg').addEventListener('input', () => { const o = d
 document.getElementById('moc-use').addEventListener('click', () => {
   const r = mocCalc(); if (!r.A) return;
   document.getElementById('f-minSpend').value = r.A;
-  document.getElementById('f-minSpendBig').value = r.B > r.A ? r.B : '';
+  document.getElementById('f-minSpendBig').value = '';
   document.getElementById('moc-used').classList.remove('hidden');
 });
 
