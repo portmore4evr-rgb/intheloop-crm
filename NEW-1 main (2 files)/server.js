@@ -281,10 +281,10 @@ function drawStatusFor(db, restaurant, customer) {
 }
 
 // ---- Streaks, badges and bigger prizes ----
-// A streak = weeks in a row (Mon-Sun) with at least one visit. Visit milestones and a 4-week
-// streak unlock bonus prizes the owner sets in the CRM (sensible defaults until they do).
-const VISIT_MILESTONES = [2, 3, 5, 10];
-const STREAK_BADGES = [2, 4, 8];
+// Simple offer: one every-visit reward plus ONE bigger prize on the 5th visit.
+// Streak prizes and extra milestones are switched off (put [2, 3, 5, 10] / [2, 4, 8] back to turn them on).
+const VISIT_MILESTONES = [5];
+const STREAK_BADGES = [];
 const DEFAULT_PRIZES = { 2: 'Free side', 3: 'Free dessert', 5: 'Free appetizer', 10: 'Free entrée', streak2: '', streak4: 'Free drink', streak8: '' };
 function prizeFor(restaurant, key) {
   const v = restaurant[`prize${key}`];
@@ -326,10 +326,10 @@ function progressFor(db, restaurant, customer) {
   const nextVisit = VISIT_MILESTONES.find((n) => visits < n);
   return {
     visits,
-    streak: streak.weeks,
+    streak: STREAK_BADGES.length ? streak.weeks : 0,
     bestStreak: best,
     visitedThisWeek: streak.visitedThisWeek,
-    atRisk: streak.atRisk,
+    atRisk: STREAK_BADGES.length ? streak.atRisk : false,
     lastWeeks: streak.lastWeeks,
     badges,
     next: nextVisit ? { n: nextVisit, remaining: nextVisit - visits, prize: prizeFor(restaurant, nextVisit) } : null,
@@ -583,7 +583,7 @@ app.post('/api/leads', (req, res) => {
     redeemDays: cleanDays(req.body.redeemDays),
     redeemFrom: cleanTime(req.body.redeemFrom),
     redeemTo: cleanTime(req.body.redeemTo),
-    drawEnabled: req.body.drawEnabled !== false,
+    drawEnabled: req.body.drawEnabled === true, // new restaurants start with the draw off
     drawCap: cleanMoney(req.body.drawCap),
     baselineWeekly: cleanAmount(req.body.baselineWeekly),
     ownerPin: cleanOwnerPin(req.body.ownerPin),
@@ -999,7 +999,7 @@ const money2 = (n) => `$${(Math.round(n * 100) / 100).toFixed(n % 1 ? 2 : 0)}`;
 function ownerMathBox(lead) {
   const A = Number(lead.minSpend) || 0;
   if (!A) return '';
-  const B = Number(lead.minSpendBig) > A ? Number(lead.minSpendBig) : 0;
+  const B = 0; // one minimum for everything
   const reward = Number(lead.mocReward) || 0; const prize = Number(lead.mocPrize) || 0;
   const f = (Number(lead.mocFood) || 30) / 100;
   const lines = [];
@@ -1105,7 +1105,8 @@ app.get('/api/public/restaurant/:id', (req, res) => {
     slowestNight: restaurant.slowestNight,
     smsEnabled: !!restaurant.smsEnabled,
     minSpend: restaurant.minSpend || null,
-    minSpendBig: restaurant.minSpendBig || null,
+    minSpendBig: null, // one minimum for everything (simple offer)
+    bigPrize: VISIT_MILESTONES.length ? { n: VISIT_MILESTONES[0], prize: prizeFor(restaurant, VISIT_MILESTONES[0]) } : null,
     logoUrl: logoUrl(restaurant),
     window: windowInfo(restaurant),
     draw: drawStatusFor(db, restaurant, null),
@@ -1676,18 +1677,14 @@ function buildOwnerReport(db, lead, which) {
       ${row('New members this month', newSignups)}
       ${row('Total club members', customers.length)}
       ${row('Check-ins (scans)', checkins)}
-      ${row('First-time guests', firstTimeGuests)}
-      ${row('Visits from regulars', regularVisits)}
       ${row('Visits that earned a Club Night reward', savedVisits)}
       ${row('Club Night visits (rewards used)', returnVisits)}
       ${row('Different guests who came back', returningGuests)}
-      ${row('Bonus prizes used (streaks and milestones)', bonusPrizes)}
-      ${row('Free-meal draw entries', drawEntries)}
-      ${row('Free meals claimed', freeMeals)}
+      ${row(`${VISIT_MILESTONES.map((n) => `${n}th`).join(' & ')}-visit prizes used`, bonusPrizes)}
+      ${drawOn(lead) || drawEntries || freeMeals ? row('Free-meal draw entries', drawEntries) + row('Free meals claimed', freeMeals) : ''}
       ${row('Messages sent to your guests', messagesSent)}
       ${row('Google review requests sent', reviewAsks)}
     </table>
-    ${topReasons.length ? `<p style="margin-top:18px"><b>Why guests came in:</b> ${escHtml(topReasons.join(' · '))}</p>` : ''}
     <p style="margin-top:22px;color:#5c5578;font-size:13px">Questions or want to change your offer? Just reply to this email.<br>— Christopher, Tuesday Club</p>
   </div>`;
   return { stats, html, subject: `${lead.restaurantName}: your Tuesday Club results for ${r.label}`, monthKey: r.key };
@@ -1732,6 +1729,7 @@ app.post('/api/leads/:id/report/send', async (req, res) => {
 // ---- Streak reminders ----
 // Thursdays after 11am: guests on a 2+ week streak who haven't been in this week get one nudge.
 async function runStreakReminders() {
+  if (!STREAK_BADGES.length) return; // streaks are off in the simple offer
   const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: TIMEZONE }));
   if (nowLocal.getDay() !== 4 || nowLocal.getHours() < 11) return;
   const db = readDB();
@@ -1839,7 +1837,7 @@ app.post('/api/leads/:id/draws/run', async (req, res) => {
 // Each pick sends on its own schedule: by email to members who gave one, and by text once texting is on.
 // Limits per guest: 1 of these a day and PROMO_MONTHLY_CAP a month (matches the "up to 4 msgs/month" consent).
 const PROMO_MONTHLY_CAP = 4;
-const PROMO_DEFAULTS = ['sun_prize', 'day_of'];
+const PROMO_DEFAULTS = ['sun_prize', 'day_of', 'miss_you'];
 const PROMO_TYPES = ['club_night_reminder', 'promo_sun_prize', 'promo_sun_all', 'promo_draw_last', 'promo_winner', 'promo_friend', 'promo_miss_you'];
 const PROMO_LIBRARY = [
   { key: 'sun_prize', title: 'Sunday: "Your prize is waiting"', when: 'Sundays at 5pm', who: 'Members with a saved prize or free meal' },
@@ -1913,7 +1911,7 @@ function promoContent(key, r, { items = [], winnerName = '', drawMonth = '' } = 
     default: return null;
   }
 }
-function promoSampleItems(r) { return [prizeFor(r, 3)]; }
+function promoSampleItems(r) { return [prizeFor(r, VISIT_MILESTONES[0] || 5)]; }
 function promoMenu(r) {
   const picks = promoPicks(r);
   return PROMO_LIBRARY.filter((x) => promoAvailable(r, x)).map((x) => {
