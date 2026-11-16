@@ -245,27 +245,27 @@
           </div>
         </div>
         <div>
-          <p class="font-mono text-[11px] uppercase tracking-wider text-amberdeep mb-2">Visit milestones</p>
+          <p class="font-mono text-[11px] uppercase tracking-wider text-amberdeep mb-2">Bigger prize</p>
           <div class="grid sm:grid-cols-2 gap-3">
-          <div class="min-w-0">
+          <div class="min-w-0 hidden">
             <label for="f-prize2" class="text-sm font-semibold block mb-1">2nd visit</label>
             <input id="f-prize2" type="text" placeholder="Free side" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
           </div>
-          <div class="min-w-0">
+          <div class="min-w-0 hidden">
             <label for="f-prize3" class="text-sm font-semibold block mb-1">3rd visit</label>
             <input id="f-prize3" type="text" placeholder="Free dessert" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
           </div>
           <div class="min-w-0">
-            <label for="f-prize5" class="text-sm font-semibold block mb-1">5th visit</label>
+            <label for="f-prize5" class="text-sm font-semibold block mb-1">On their 5th visit</label>
             <input id="f-prize5" type="text" placeholder="Free appetizer" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
           </div>
-          <div class="min-w-0">
+          <div class="min-w-0 hidden">
             <label for="f-prize10" class="text-sm font-semibold block mb-1">10th visit</label>
             <input id="f-prize10" type="text" placeholder="Free entrée" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
           </div>
           </div>
         </div>
-        <div>
+        <div class="hidden">
           <p class="font-mono text-[11px] uppercase tracking-wider text-teal mb-2">Weekly streaks</p>
           <div class="grid sm:grid-cols-3 gap-3">
           <div class="min-w-0">
@@ -301,7 +301,7 @@
                 <label class="min-w-0 block"><span class="text-sm font-semibold block mb-1">Every-visit reward menu price ($)</span>
                   <span class="block text-xs text-inkmute mb-1">e.g. fries $6</span>
                   <input id="moc-reward" type="number" inputmode="decimal" min="0" step="0.5" placeholder="e.g. 6" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal"></label>
-                <label class="min-w-0 block"><span class="text-sm font-semibold block mb-1">Biggest prize menu price ($)</span>
+                <label class="min-w-0 block"><span class="text-sm font-semibold block mb-1">5th-visit prize menu price ($)</span>
                   <span class="block text-xs text-inkmute mb-1">e.g. entrée $18</span>
                   <input id="moc-prize" type="number" inputmode="decimal" min="0" step="0.5" placeholder="e.g. 18" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal"></label>
               </div>
@@ -312,11 +312,11 @@
           </details>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div class="min-w-0">
-              <label for="f-minSpend" class="text-sm font-semibold block mb-1">Every-visit reward</label>
-              <span class="block text-xs text-inkmute mb-1">About 60–75% of their average check. Leave blank for no minimum.</span>
+              <label for="f-minSpend" class="text-sm font-semibold block mb-1">Rewards and prizes</label>
+              <span class="block text-xs text-inkmute mb-1">One minimum for everything, about 60–75% of their average check. Leave blank for no minimum.</span>
               <input id="f-minSpend" type="number" inputmode="numeric" min="0" step="1" placeholder="e.g. 15" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
             </div>
-            <div class="min-w-0">
+            <div class="min-w-0 hidden">
               <label for="f-minSpendBig" class="text-sm font-semibold block mb-1">Milestone and streak prizes</label>
               <span class="block text-xs text-inkmute mb-1">Optional higher minimum for the bigger prizes. Blank uses the one on the left.</span>
               <input id="f-minSpendBig" type="number" inputmode="numeric" min="0" step="1" placeholder="e.g. 25" class="w-full min-w-0 bg-bg border border-hair rounded-full px-4 py-2.5 focus:outline-none focus:border-teal">
@@ -385,6 +385,7 @@
       </div>
       <p id="promo-status" class="text-xs text-teal mb-4 hidden"></p>
 
+      <div class="hidden"><!-- weekly automations: hidden in the simple offer; Member Messages covers this -->
       <h3 class="font-display text-xl mb-1">Automate a Promotion</h3>
       <p class="text-inkmute text-sm mb-3">Repeats every week on the day you pick — no manual sending required.</p>
       <textarea id="auto-message" rows="2" placeholder="e.g. It's Wednesday — free dessert with any entrée tonight!" class="w-full bg-bg border border-hair rounded-2xl px-3 py-2.5 text-sm mb-3 focus:outline-none focus:border-teal resize-none"></textarea>
@@ -401,6 +402,7 @@
         <button id="btn-add-automation" class="bg-teal text-bg font-semibold text-sm px-4 rounded-full hover:bg-amber transition">Save</button>
       </div>
       <div id="automations-list" class="space-y-2 mb-6"></div>
+      </div>
 
       <h3 class="font-display text-xl mb-1">Recent Promotions</h3>
       <div id="promotions-list" class="space-y-2 max-h-40 overflow-y-auto"></div>
