@@ -1010,7 +1010,7 @@ function ownerMathBox(lead) {
   }
   if (prize) {
     const pmin = B || A;
-    lines.push(`Your biggest prize (${money2(prize)} on the menu) costs about <b>${money2(prize * f)}</b>, on an order of ${money2(pmin)} or more.`);
+    lines.push(`The 5th-visit prize (${money2(prize)} on the menu) costs you about <b>${money2(prize * f)}</b>, once every 5 visits, on a ${money2(pmin)}+ order.`);
   }
   return `<div style="background:#fff;border:1px solid #ece4f7;border-radius:18px;padding:16px 18px;margin:16px 0">
     <p style="margin:0;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#0b8a74;font-weight:700">Your reward math</p>
@@ -1935,7 +1935,7 @@ function lastVisitAt(db, c) {
 }
 function promoAudience(db, r, key, now = Date.now()) {
   return db.customers.filter((c) => {
-    if (c.restaurantId !== r.id || !canMessage(c, r)) return false;
+    if (c.restaurantId !== r.id || !(canMessage(c, r) || c.demo)) return false; // demo guests count in previews only
     if (localDay(c.optedInAt) === localDay(new Date(now))) return false; // not on the day they joined
     const s = savedSomething(db, c, now);
     const last = Date.parse(lastVisitAt(db, c)) || 0;
@@ -2000,7 +2000,7 @@ async function runPromoMessages() {
       if (r.promoSent[d.key] === d.occ) continue;
       r.promoSent[d.key] = d.occ; changed = true;
       for (const c of promoAudience(db, r, d.key, now.getTime())) {
-        if (!promoRoom(counts, c.id)) continue;
+        if (c.demo || !promoRoom(counts, c.id)) continue;
         if (d.key === 'winner' && c.id === d.draw.winnerId) continue;
         if (d.key === 'miss_you' && now.getTime() - (counts.missYou.get(c.id) || 0) < 28 * 86400000) continue;
         const items = activeBank(c).map((b) => b.label);
@@ -2167,6 +2167,82 @@ app.use((req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
   res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
 });
+
+// ---- Demo restaurant for sales pitches (set DEMO_RESTAURANT=1 in Railway) ----
+// Creates "Maple Street Diner (Demo)" once, with about 3 weeks of made-up guests and visits, so the guest page,
+// owner page and report have something real-looking to show. Demo guests have no email and no texting, so
+// nothing is ever sent to them. Delete the restaurant in the CRM and restart to rebuild it with fresh dates.
+const DEMO_LOGO_PNG = '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';
+function seedDemoRestaurant() {
+  if (process.env.DEMO_RESTAURANT !== '1') return;
+  const db = readDB();
+  if (db.leads.some((l) => l.demo)) return;
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+  const pick = (a) => a[Math.floor(rnd() * a.length)];
+  const now = Date.now();
+  const today = localDay(new Date());
+  const dayAgo = (n) => localDay(new Date(now - n * 86400000));
+  const lead = {
+    id: crypto.randomUUID(), demo: true, restaurantName: 'Maple Street Diner (Demo)', contactName: 'Sample owner', phone: '', email: '',
+    slowestNight: 'Tuesday', currentOffer: 'Free fries', googleReviewLink: '', redeemDays: [1, 2, 3], redeemFrom: '17:00', redeemTo: '20:00',
+    drawEnabled: false, drawCap: 40, baselineWeekly: 900, ownerPin: '', avgCheck: 24, mocTier: 'casual', mocReward: 6, mocPrize: 12, mocFood: 30,
+    prize2: '', prize3: '', prize5: 'Free appetizer', prize10: '', prizestreak2: '', prizestreak4: '', prizestreak8: '',
+    minSpend: 15, minSpendBig: null, smsEnabled: false, stage: 'Live Client', liveSince: new Date(now - 24 * 86400000).toISOString(),
+    notes: 'Sample restaurant for showing owners. Guests and numbers are made up.', rewardCode: makeRewardCode('Maple Street Diner', db.leads, null),
+    rewardCounter: 0, staffPin: newStaffPin(), createdAt: new Date(now - 24 * 86400000).toISOString(), updatedAt: new Date().toISOString(),
+  };
+  ensureOwnerToken(lead);
+  try {
+    fs.mkdirSync(LOGO_DIR, { recursive: true });
+    lead.logoFile = `${lead.id}.png`; lead.logoVersion = now;
+    fs.writeFileSync(path.join(LOGO_DIR, lead.logoFile), Buffer.from(DEMO_LOGO_PNG, 'base64'));
+  } catch (e) { lead.logoFile = null; }
+  db.leads.push(lead);
+  const first = ['Ana', 'Marcus', 'Jen', 'Luis', 'Priya', 'Tom', 'Keisha', 'Dan', 'Sofia', 'Mike', 'Rosa', 'Kevin', 'Nia', 'Chris', 'Emma', 'Jay', 'Tina', 'Omar', 'Liz', 'Sam', 'Gabi', 'Rob', 'Maya', 'Dev'];
+  const last = ['Lopez', 'Reed', 'Park', 'Silva', 'Shah', 'Nolan', 'Brown', 'Kelly', 'Costa', 'Ward', 'Diaz', 'Chen', 'Mensah', 'Ortiz'];
+  const isClub = (day) => [1, 2, 3].includes(new Date(`${day}T12:00:00Z`).getUTCDay());
+  for (let g = 0; g < 78; g += 1) {
+    const joinedAgo = 2 + Math.floor(rnd() * 22);
+    const c = { id: crypto.randomUUID(), restaurantId: lead.id, rewardId: nextRewardId(lead, db), demo: true,
+      name: `${pick(first)} ${pick(last)}`, phone: `+1508555${String(1000 + g)}`, email: '', smsConsent: false,
+      optedInAt: '', optedOut: false, redemptionCount: 0, lastRedemptionAt: null, followUpSentAt: 'demo', reviewRequestSentAt: 'demo',
+      checkinCount: 0, awarded: [], bank: [], deviceToken: newDeviceToken() };
+    const visits = 1 + Math.floor(rnd() * 6);
+    const days = new Set([dayAgo(joinedAgo)]);
+    // most return visits land on Club Nights: that's what the saved rewards pull guests in for
+    for (let k = 1; k < visits; k += 1) {
+      let day = dayAgo(Math.floor(rnd() * joinedAgo));
+      for (let t = 0; t < 6 && rnd() < 0.75 && !isClub(day); t += 1) day = dayAgo(Math.floor(rnd() * joinedAgo));
+      days.add(day);
+    }
+    [...days].sort().forEach((day, i) => {
+      const club = isClub(day) && i > 0;
+      const at = zonedToUtc(day, club ? pick(['17:20', '18:05', '18:40', '19:15']) : pick(['12:30', '18:30', '19:45', '20:30'])).toISOString();
+      if (Date.parse(at) > now) return;
+      c.checkinCount += 1;
+      if (i === 0) c.optedInAt = at;
+      const status = i === 0 ? 'new' : club ? (c.checkinCount === 5 ? 'bonus' : 'reward') : 'saved';
+      const v = { id: crypto.randomUUID(), restaurantId: lead.id, customerId: c.id, day, visitType: '', via: 'form', at,
+        code: `${SCAN_LETTERS[status]}-${String(1000 + db.visits.length % 9000).padStart(4, '0')}`, scanStatus: status };
+      if (c.checkinCount === 5) { c.awarded.push('v5'); v.prize = 'Free appetizer'; }
+      db.visits.unshift(v);
+      c.lastCheckinAt = at;
+      if (status === 'reward' || status === 'bonus') {
+        c.redemptionCount += 1; c.lastRedemptionAt = at;
+        db.redemptions.unshift({ id: crypto.randomUUID(), restaurantId: lead.id, rewardIdEntered: c.rewardId, result: 'valid', via: 'scan',
+          visitCode: v.code, customerId: c.id, at, ...(status === 'bonus' ? { bonusPrize: 'Free appetizer' } : {}) });
+      }
+      if (status === 'saved' && c.checkinCount === 5) c.bank.push(bankItem('prize', 'Free appetizer'));
+    });
+    if (!c.optedInAt) continue;
+    db.customers.unshift(c);
+    db.messages.unshift({ id: crypto.randomUUID(), restaurantId: lead.id, customerId: c.id, type: 'welcome', channel: 'email', body: '', sentAt: c.optedInAt, status: 'demo' });
+  }
+  writeDB(db);
+  console.log(`Demo restaurant created: ${lead.restaurantName}`);
+}
+seedDemoRestaurant();
 
 app.listen(PORT, '0.0.0.0', () => {
   const modes = [];
