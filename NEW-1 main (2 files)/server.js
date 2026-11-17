@@ -1104,6 +1104,7 @@ app.get('/api/public/restaurant/:id', (req, res) => {
     currentOffer: restaurant.currentOffer,
     slowestNight: restaurant.slowestNight,
     smsEnabled: !!restaurant.smsEnabled,
+    textingLive: !!restaurant.smsEnabled && !SIMULATION_MODE, // when false, new members must give an email so reminders reach them
     minSpend: restaurant.minSpend || null,
     minSpendBig: null, // one minimum for everything (simple offer)
     bigPrize: VISIT_MILESTONES.length ? { n: VISIT_MILESTONES[0], prize: prizeFor(restaurant, VISIT_MILESTONES[0]) } : null,
@@ -1138,6 +1139,10 @@ app.post('/api/public/checkin', rateLimit('checkin', 40, 10 * 60 * 1000), async 
   let customer = db.customers.find(
     (c) => c.restaurantId === restaurantId && (c.phone === phone || (email && c.email === email))
   );
+  // Reminders are what bring guests back: a new member needs a way to get them (email, or texts once texting is live).
+  if (!customer && !email && !(wantsTexts && !SIMULATION_MODE)) {
+    return res.status(400).json({ error: 'Please add your email so we can tell you when your reward is waiting.' });
+  }
   const now = new Date().toISOString();
   const isNewCustomer = !customer;
   if (customer) {
