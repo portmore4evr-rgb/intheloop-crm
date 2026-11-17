@@ -1,6 +1,7 @@
 const restaurantId = window.location.pathname.split('/checkin/')[1];
 const TOKEN_KEY = 'itl_guest_token'; // kept from the old name so saved phones still work
 let currentOffer = '';
+let textingLive = false;
 let minSpend = null, minSpendBig = null; // minimum order to redeem, set per restaurant in the CRM
 const minText = (n) => (n ? `with a $${n}+ order` : '');
 let restaurantName = '';
@@ -235,6 +236,8 @@ async function loadRestaurant() {
     document.getElementById('consent-text').textContent = consentText();
     document.getElementById('join-consent-text').textContent = consentText();
     // The text checkbox only shows when this restaurant has the text add-on; email works either way.
+    textingLive = !!data.textingLive;
+    document.getElementById('email-optional').classList.toggle('hidden', !textingLive);
     if (data.smsEnabled) {
       document.getElementById('consent-wrap').classList.remove('hidden');
       document.getElementById('join-consent-wrap').classList.remove('hidden');
@@ -292,6 +295,7 @@ async function checkIn() {
   const fail = (msg) => { errorEl.textContent = msg; errorEl.classList.remove('hidden'); };
   if (!visitType) return fail('Please pick whether this is your first time here.');
   if (!phone) return fail('Please enter your phone number.');
+  if (!email && !(textingLive && smsConsent)) return fail(textingLive ? 'Add your email or tick the text box so we can tell you when your reward is waiting.' : 'Please add your email so we can tell you when your reward is waiting.');
 
   try {
     const res = await fetch('/api/public/checkin', {
